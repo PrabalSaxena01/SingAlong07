@@ -63,7 +63,7 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             type,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUS_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -116,10 +116,10 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
         serviceScope.launch {
             app.preferencesManager.settingsFlow.collectLatest { settings ->
                 layoutParams?.let { params ->
-                    val touchableFlags = if (settings.isClickThroughEnabled) {
-                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                    val touchableFlags: Int = if (settings.isClickThroughEnabled) {
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                     } else {
-                        WindowManager.LayoutParams.FLAG_NOT_FOCUS_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                     }
 
                     params.flags = touchableFlags

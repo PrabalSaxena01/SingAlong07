@@ -9,14 +9,12 @@ data class CleanedMetadata(
 object TrackMetadataCleaner {
 
     private val NOISE_REGEXES = listOf(
-        Regex("""(?i)\(official\s*(music)?\s*(video|audio|lyric|visualizer|remastered|hd|4k)?\)"""),
-        Regex("""(?i)\[(official\s*)?(video|audio|lyrics?|hd|4k|remastered|visualizer)?\]"""),
+        Regex("""(?i)\[[^\]]*(remaster|4k|hd|video|audio|official|visualizer|lyric)[^\]]*\]"""),
+        Regex("""(?i)\([^)]*(remaster|4k|hd|video|audio|official|visualizer|lyric)[^)]*\)"""),
         Regex("""(?i)\b(feat\.|ft\.)\s+[^()\\[\\]]+"""),
         Regex("""(?i)\b(lyrics?|lyric video|audio)\b"""),
         Regex("""(?i)^\d+[\s._-]+"""),                     // e.g. "01. Song Title"
-        Regex("""(?i)\.(mp3|flac|m4a|wav|aac|ogg)$"""),   // file extensions
-        Regex("""(?i)\[\s*remaster(ed)?\s*(\d{4})?\s*\]"""),
-        Regex("""(?i)\(\s*remaster(ed)?\s*(\d{4})?\s*\)""")
+        Regex("""(?i)\.(mp3|flac|m4a|wav|aac|ogg)$""")    // file extensions
     )
 
     /**
