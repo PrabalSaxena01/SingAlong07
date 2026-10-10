@@ -63,6 +63,8 @@ fun FloatingLyricsCardView(
     onOpenEditSearch: () -> Unit = {},
     onOpenSettings: () -> Unit,
     onMinimizeToPill: () -> Unit,
+    onCatchAudio: () -> Unit = {},
+    onLaunchGoogleSoundSearch: () -> Unit = {},
     onDragWindow: (Float, Float) -> Unit = { _, _ -> },
     onDragWindowEnd: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -333,6 +335,36 @@ fun FloatingLyricsCardView(
                                 fontSize = 11.sp,
                                 textAlign = TextAlign.Center
                             )
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                FilledTonalButton(
+                                    onClick = onCatchAudio,
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.filledTonalButtonColors(
+                                        containerColor = colorScheme.accentColor.copy(alpha = 0.20f),
+                                        contentColor = colorScheme.accentColor
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.GraphicEq, contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Audio Catch", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+
+                                OutlinedButton(
+                                    onClick = onLaunchGoogleSoundSearch,
+                                    shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(15.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Google Sound", fontSize = 11.sp)
+                                }
+                            }
                         }
                     }
                 } else if (syncState.isLoading) {

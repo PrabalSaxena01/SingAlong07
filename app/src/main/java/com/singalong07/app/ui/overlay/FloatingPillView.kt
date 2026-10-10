@@ -27,8 +27,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.draw.scale
 import com.singalong07.app.ui.theme.OverlayColorScheme
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun FloatingPillView(
     trackTitle: String,
@@ -37,6 +45,10 @@ fun FloatingPillView(
     colorScheme: OverlayColorScheme,
     onExpandToCard: () -> Unit,
     albumArt: Bitmap? = null,
+    isAudioCatching: Boolean = false,
+    audioCatchStatus: String? = null,
+    onCatchAudio: () -> Unit = {},
+    onLaunchGoogleSoundSearch: () -> Unit = {},
     onDragWindow: (Float, Float) -> Unit = { _, _ -> },
     onDragWindowEnd: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -56,118 +68,188 @@ fun FloatingPillView(
         label = "bar2"
     )
 
-    Surface(
-        modifier = modifier
-            .clip(RoundedCornerShape(32.dp))
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    var isDrag = false
-                    var accumulatedDelta = Offset.Zero
-                    val pointerId = down.id
+    // Audio Catch pulse animation
+    val catchPulse by infiniteTransition.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.12f,
+        animationSpec = infiniteRepeatable(tween(600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "catchPulse"
+    )
 
-                    try {
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull { it.id == pointerId } ?: break
-                            if (!change.pressed) {
-                                if (!isDrag) {
-                                    onExpandToCard()
-                                }
-                                break
-                            }
-                            val delta = change.position - change.previousPosition
-                            accumulatedDelta += delta
-                            if (!isDrag && accumulatedDelta.getDistance() > viewConfiguration.touchSlop) {
-                                isDrag = true
-                            }
-                            if (isDrag) {
-                                change.consume()
-                                onDragWindow(delta.x, delta.y)
-                            }
-                        }
-                    } finally {
-                        if (isDrag) {
-                            onDragWindowEnd()
-                        }
-                    }
-                }
-            },
+    Surface(
+        modifier = modifier.clip(RoundedCornerShape(32.dp)),
         color = colorScheme.backgroundColor.copy(alpha = colorScheme.backgroundAlpha),
         shape = RoundedCornerShape(32.dp),
         shadowElevation = 8.dp
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.padding(start = 10.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Album Orb / Music Icon
-            Box(
+            // Main left section: Album art + Track info + Equalizer (drags & expands)
+            Row(
                 modifier = Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(colorScheme.accentColor),
-                contentAlignment = Alignment.Center
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            var isDrag = false
+                            var accumulatedDelta = Offset.Zero
+                            val pointerId = down.id
+
+                            try {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                                    if (!change.pressed) {
+                                        if (!isDrag) {
+                                            onExpandToCard()
+                                        }
+                                        break
+                                    }
+                                    val delta = change.position - change.previousPosition
+                                    accumulatedDelta += delta
+                                    if (!isDrag && accumulatedDelta.getDistance() > viewConfiguration.touchSlop) {
+                                        isDrag = true
+                                    }
+                                    if (isDrag) {
+                                        change.consume()
+                                        onDragWindow(delta.x, delta.y)
+                                    }
+                                }
+                            } finally {
+                                if (isDrag) {
+                                    onDragWindowEnd()
+                                }
+                            }
+                        }
+                    },
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                if (albumArt != null) {
-                    Image(
-                        bitmap = albumArt.asImageBitmap(),
-                        contentDescription = "Album Art",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(CircleShape)
+                // Album Orb / Music Icon
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(colorScheme.accentColor),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (albumArt != null) {
+                        Image(
+                            bitmap = albumArt.asImageBitmap(),
+                            contentDescription = "Album Art",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.MusicNote,
+                            contentDescription = "Music",
+                            tint = Color.White,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Track title & artist
+                Column(modifier = Modifier.widthIn(max = 130.dp)) {
+                    Text(
+                        text = if (isAudioCatching) (audioCatchStatus ?: "Listening...") else trackTitle.ifBlank { "SingAlong07" },
+                        color = if (isAudioCatching) Color(0xFF00E5FF) else colorScheme.activeLineColor,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.MusicNote,
-                        contentDescription = "Music",
-                        tint = Color.White,
-                        modifier = Modifier.size(16.dp)
+                    Text(
+                        text = if (isAudioCatching) "Ambient Audio ID" else artistName.ifBlank { "Tap to expand" },
+                        color = colorScheme.inactiveLineColor,
+                        fontSize = 10.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
+                }
+
+                // Animated Equalizer Bars
+                if (isPlaying) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Row(
+                        verticalAlignment = Alignment.Bottom,
+                        modifier = Modifier.height(14.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(2.5.dp)
+                                .height(barHeight1.dp)
+                                .background(colorScheme.accentColor, RoundedCornerShape(1.dp))
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Box(
+                            modifier = Modifier
+                                .width(2.5.dp)
+                                .height(barHeight2.dp)
+                                .background(colorScheme.accentColor, RoundedCornerShape(1.dp))
+                        )
+                    }
                 }
             }
 
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(6.dp))
 
-            // Track title & artist
-            Column(modifier = Modifier.widthIn(max = 140.dp)) {
-                Text(
-                    text = trackTitle.ifBlank { "SingAlong07" },
-                    color = colorScheme.activeLineColor,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = artistName.ifBlank { "Tap to open" },
-                    color = colorScheme.inactiveLineColor,
-                    fontSize = 10.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            // Vertical divider between music body and audio catch action
+            Box(
+                modifier = Modifier
+                    .width(1.dp)
+                    .height(18.dp)
+                    .background(colorScheme.inactiveLineColor.copy(alpha = 0.25f))
+            )
 
-            // Animated Equalizer Bars
-            if (isPlaying) {
-                Spacer(modifier = Modifier.width(8.dp))
-                Row(
-                    verticalAlignment = Alignment.Bottom,
-                    modifier = Modifier.height(14.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(2.5.dp)
-                            .height(barHeight1.dp)
-                            .background(colorScheme.accentColor, RoundedCornerShape(1.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+
+            // Audio Catching Icon Button
+            // Tap: Capture & Identify ambient audio (AudD + auto lyrics sync)
+            // Long Press: Launch Google Music Search (Sound Search)
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .then(
+                        if (isAudioCatching) Modifier.scale(catchPulse)
+                        else Modifier
                     )
-                    Spacer(modifier = Modifier.width(2.dp))
-                    Box(
-                        modifier = Modifier
-                            .width(2.5.dp)
-                            .height(barHeight2.dp)
-                            .background(colorScheme.accentColor, RoundedCornerShape(1.dp))
+                    .clip(CircleShape)
+                    .background(
+                        if (isAudioCatching) Color(0xFF00E5FF).copy(alpha = 0.25f)
+                        else colorScheme.accentColor.copy(alpha = 0.16f)
+                    )
+                    .border(
+                        BorderStroke(
+                            1.dp,
+                            if (isAudioCatching) Color(0xFF00E5FF)
+                            else colorScheme.accentColor.copy(alpha = 0.35f)
+                        ),
+                        CircleShape
+                    )
+                    .combinedClickable(
+                        onClick = onCatchAudio,
+                        onLongClick = onLaunchGoogleSoundSearch
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isAudioCatching) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        color = Color(0xFF00E5FF),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.GraphicEq,
+                        contentDescription = "Catch Audio (Tap for in-app ID, Long-press for Google Sound Search)",
+                        tint = colorScheme.accentColor,
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }

@@ -31,6 +31,38 @@ fun FloatingOverlayRoot(
     val dynamicScheme by controllerBridge.dynamicColorScheme.collectAsState()
     val albumArtBitmap by controllerBridge.albumArtBitmap.collectAsState()
 
+    val isAudioCatching by app.audioCaptureManager.isCapturing.collectAsState()
+    val audioCatchStatus by app.audioCaptureManager.statusText.collectAsState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val handleCatchAudio: () -> Unit = {
+        if (!app.audioCaptureManager.hasRecordPermission(context)) {
+            android.widget.Toast.makeText(
+                context,
+                "Microphone permission required. Opening SingAlong07...",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+            val intent = android.content.Intent(context, com.singalong07.app.ui.main.MainActivity::class.java).apply {
+                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                putExtra("REQUEST_MIC_PERMISSION", true)
+            }
+            context.startActivity(intent)
+        } else {
+            app.recordAndCatchAmbientAudio(context)
+        }
+    }
+
+    val handleLaunchGoogleSoundSearch: () -> Unit = {
+        val launched = app.audioCaptureManager.launchGoogleMusicSearch(context)
+        if (!launched) {
+            android.widget.Toast.makeText(
+                context,
+                "Google Sound Search not available on this device",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
     var isExpanded by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showEditSearch by remember { mutableStateOf(false) }
@@ -101,6 +133,8 @@ fun FloatingOverlayRoot(
                         onOpenEditSearch = { showEditSearch = true },
                         onOpenSettings = { showSettings = true },
                         onMinimizeToPill = { isExpanded = false },
+                        onCatchAudio = handleCatchAudio,
+                        onLaunchGoogleSoundSearch = handleLaunchGoogleSoundSearch,
                         onDragWindow = onDragWindow,
                         onDragWindowEnd = onDragWindowEnd
                     )
@@ -145,6 +179,10 @@ fun FloatingOverlayRoot(
                     isPlaying = syncState.isPlaying,
                     colorScheme = colorScheme,
                     albumArt = albumArtBitmap,
+                    isAudioCatching = isAudioCatching,
+                    audioCatchStatus = audioCatchStatus,
+                    onCatchAudio = handleCatchAudio,
+                    onLaunchGoogleSoundSearch = handleLaunchGoogleSoundSearch,
                     onExpandToCard = { isExpanded = true },
                     onDragWindow = onDragWindow,
                     onDragWindowEnd = onDragWindowEnd

@@ -48,20 +48,47 @@ import java.util.*
 
 class MainActivity : ComponentActivity() {
 
+    private val micPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            Toast.makeText(this, "Microphone permission granted for Audio Catching!", Toast.LENGTH_SHORT).show()
+        } else {
+            Toast.makeText(this, "Microphone permission is required to capture ambient audio", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleIntents(intent)
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 MainScreen(
                     hasOverlayPermission = Settings.canDrawOverlays(this),
                     onRequestOverlayPermission = { requestOverlayPermission() },
                     onRequestNotificationPermission = { requestNotificationPermission() },
+                    onRequestMicPermission = { requestMicPermission() },
                     onStartOverlay = { startOverlayService() },
                     onStopOverlay = { stopOverlayService() },
                     onPlayOnYouTube = { trackTitle, artistName -> playOnYouTube(trackTitle, artistName) }
                 )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleIntents(intent)
+    }
+
+    private fun handleIntents(intent: Intent?) {
+        if (intent?.getBooleanExtra("REQUEST_MIC_PERMISSION", false) == true) {
+            requestMicPermission()
+        }
+    }
+
+    private fun requestMicPermission() {
+        micPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
     }
 
     private fun playOnYouTube(trackTitle: String, artistName: String) {
@@ -122,6 +149,7 @@ fun MainScreen(
     hasOverlayPermission: Boolean,
     onRequestOverlayPermission: () -> Unit,
     onRequestNotificationPermission: () -> Unit,
+    onRequestMicPermission: () -> Unit = {},
     onStartOverlay: () -> Unit,
     onStopOverlay: () -> Unit,
     onPlayOnYouTube: (trackTitle: String, artistName: String) -> Unit = { _, _ -> }
@@ -207,6 +235,7 @@ fun MainScreen(
                     PlayerAndOverlayTab(
                         onRequestOverlayPermission = onRequestOverlayPermission,
                         onRequestNotificationPermission = onRequestNotificationPermission,
+                        onRequestMicPermission = onRequestMicPermission,
                         onStartOverlay = onStartOverlay,
                         onStopOverlay = onStopOverlay
                     )
@@ -250,6 +279,7 @@ fun MainScreen(
 fun PlayerAndOverlayTab(
     onRequestOverlayPermission: () -> Unit,
     onRequestNotificationPermission: () -> Unit,
+    onRequestMicPermission: () -> Unit = {},
     onStartOverlay: () -> Unit,
     onStopOverlay: () -> Unit
 ) {
@@ -313,19 +343,28 @@ fun PlayerAndOverlayTab(
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         FilledTonalButton(
                             onClick = onRequestOverlayPermission,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
                         ) {
-                            Text("Overlay Access", fontSize = 11.sp)
+                            Text("Overlay", fontSize = 11.sp)
                         }
                         FilledTonalButton(
                             onClick = onRequestNotificationPermission,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
                         ) {
-                            Text("Notification Sync", fontSize = 11.sp)
+                            Text("Notify Sync", fontSize = 11.sp)
+                        }
+                        FilledTonalButton(
+                            onClick = onRequestMicPermission,
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp)
+                        ) {
+                            Text("Mic Catch", fontSize = 11.sp)
                         }
                     }
                 }
@@ -441,6 +480,12 @@ fun PlayerAndOverlayTab(
     }
 }
 
+enum class HistoryFilter {
+    ALL,
+    MEDIA_PLAYERS,
+    AUDIO_CAPTURED
+}
+
 @Composable
 fun ListeningHistoryTab(
     historyList: List<ListeningHistoryEntity>,
@@ -448,11 +493,24 @@ fun ListeningHistoryTab(
     onExportCsv: () -> Unit,
     onClearHistory: () -> Unit
 ) {
+    var selectedFilter by remember { mutableStateOf(HistoryFilter.ALL) }
+
+    val audioCapturedCount = remember(historyList) { historyList.count { it.matchedViaFingerprint } }
+    val mediaPlayersCount = remember(historyList) { historyList.count { !it.matchedViaFingerprint } }
+
+    val displayedHistory = remember(historyList, selectedFilter) {
+        when (selectedFilter) {
+            HistoryFilter.ALL -> historyList
+            HistoryFilter.MEDIA_PLAYERS -> historyList.filter { !it.matchedViaFingerprint }
+            HistoryFilter.AUDIO_CAPTURED -> historyList.filter { it.matchedViaFingerprint }
+        }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 12.dp),
+                .padding(top = 12.dp, bottom = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -484,23 +542,64 @@ fun ListeningHistoryTab(
             }
         }
 
-        if (historyList.isEmpty()) {
+        // Filter Chips Row: All, Media Players, Audio Captured
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 10.dp)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            FilterChip(
+                selected = selectedFilter == HistoryFilter.ALL,
+                onClick = { selectedFilter = HistoryFilter.ALL },
+                label = { Text("All (${historyList.size})", fontSize = 11.sp, fontWeight = if (selectedFilter == HistoryFilter.ALL) FontWeight.Bold else FontWeight.Normal) },
+                leadingIcon = {
+                    Icon(Icons.Default.QueueMusic, contentDescription = null, modifier = Modifier.size(15.dp))
+                }
+            )
+            FilterChip(
+                selected = selectedFilter == HistoryFilter.MEDIA_PLAYERS,
+                onClick = { selectedFilter = HistoryFilter.MEDIA_PLAYERS },
+                label = { Text("Media Players ($mediaPlayersCount)", fontSize = 11.sp, fontWeight = if (selectedFilter == HistoryFilter.MEDIA_PLAYERS) FontWeight.Bold else FontWeight.Normal) },
+                leadingIcon = {
+                    Icon(Icons.Default.PlayCircle, contentDescription = null, modifier = Modifier.size(15.dp))
+                }
+            )
+            FilterChip(
+                selected = selectedFilter == HistoryFilter.AUDIO_CAPTURED,
+                onClick = { selectedFilter = HistoryFilter.AUDIO_CAPTURED },
+                label = { Text("Audio Captured ($audioCapturedCount)", fontSize = 11.sp, fontWeight = if (selectedFilter == HistoryFilter.AUDIO_CAPTURED) FontWeight.Bold else FontWeight.Normal) },
+                leadingIcon = {
+                    Icon(Icons.Default.GraphicEq, contentDescription = null, modifier = Modifier.size(15.dp))
+                }
+            )
+        }
+
+        if (displayedHistory.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.QueueMusic, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(48.dp))
+                    Icon(
+                        imageVector = if (selectedFilter == HistoryFilter.AUDIO_CAPTURED) Icons.Default.GraphicEq else Icons.Default.QueueMusic,
+                        contentDescription = null,
+                        tint = Color.Gray,
+                        modifier = Modifier.size(48.dp)
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "No tracks played yet",
+                        text = if (selectedFilter == HistoryFilter.AUDIO_CAPTURED) "No captured audio yet" else "No tracks played yet",
                         fontWeight = FontWeight.SemiBold,
                         color = Color.Gray
                     )
                     Text(
-                        text = "Play songs in YouTube Music, Spotify, or any player to track history",
+                        text = if (selectedFilter == HistoryFilter.AUDIO_CAPTURED) "Tap the Audio Catch icon in the floating pill to identify ambient music" else "Play songs in YouTube Music, Spotify, or any player to track history",
                         fontSize = 12.sp,
-                        color = Color.Gray
+                        color = Color.Gray,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 24.dp)
                     )
                 }
             }
@@ -509,7 +608,7 @@ fun ListeningHistoryTab(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
-                items(historyList) { item ->
+                items(displayedHistory) { item ->
                     HistoryItemCard(
                         item = item,
                         onPlayOnYouTube = { onPlayOnYouTube(item.trackTitle, item.artistName) }
@@ -795,6 +894,24 @@ fun ThemeOptionCard(
     }
 }
 
+fun friendlyPlayerName(packageName: String): String {
+    return when {
+        packageName.contains("spotify") -> "Spotify"
+        packageName.contains("youtube.music") -> "YT Music"
+        packageName.contains("youtube") -> "YouTube"
+        packageName.contains("apple") -> "Apple Music"
+        packageName.contains("jiosaavn") || packageName.contains("saavn") -> "JioSaavn"
+        packageName.contains("amazon") -> "Amazon Music"
+        packageName.contains("gaana") -> "Gaana"
+        packageName.contains("soundcloud") -> "SoundCloud"
+        packageName.contains("kugou") -> "KuGou"
+        packageName.contains("netease") -> "Netease"
+        packageName.contains("googlequicksearchbox") -> "Google Sound Search"
+        packageName.contains("ambient.audio") -> "Audio Capture"
+        else -> "Media Player"
+    }
+}
+
 @Composable
 fun HistoryItemCard(
     item: ListeningHistoryEntity,
@@ -806,7 +923,10 @@ fun HistoryItemCard(
         shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surface,
         modifier = Modifier.fillMaxWidth(),
-        tonalElevation = 2.dp
+        tonalElevation = 2.dp,
+        border = if (item.matchedViaFingerprint) {
+            androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF00B4D8).copy(alpha = 0.40f))
+        } else null
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
@@ -814,13 +934,55 @@ fun HistoryItemCard(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                Text(text = item.trackTitle, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                Text(text = item.artistName, color = Color.Gray, fontSize = 12.sp)
-                Spacer(modifier = Modifier.height(2.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "${item.lyricSource ?: "No source"} • ${item.lyricSyncType}",
-                        color = Color(0xFF1DB954),
+                        text = item.trackTitle,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        modifier = Modifier.weight(1f, fill = false),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (item.matchedViaFingerprint) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color(0xFF00B4D8).copy(alpha = 0.16f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.GraphicEq,
+                                    contentDescription = null,
+                                    tint = Color(0xFF00B4D8),
+                                    modifier = Modifier.size(11.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "Audio Captured",
+                                    color = Color(0xFF00B4D8),
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+                Text(
+                    text = item.artistName,
+                    color = Color.Gray,
+                    fontSize = 12.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(3.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val playerLabel = if (item.matchedViaFingerprint) "Acoustic ID" else friendlyPlayerName(item.sourcePackage)
+                    Text(
+                        text = "$playerLabel • ${item.lyricSource ?: "No source"} • ${item.lyricSyncType}",
+                        color = if (item.matchedViaFingerprint) Color(0xFF00B4D8) else Color(0xFF1DB954),
                         fontSize = 10.sp
                     )
                     if (item.userOffsetMs != 0L) {

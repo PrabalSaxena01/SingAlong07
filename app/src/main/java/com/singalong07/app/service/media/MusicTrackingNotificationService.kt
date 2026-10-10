@@ -105,7 +105,37 @@ class MusicTrackingNotificationService : NotificationListenerService() {
             }
         } catch (_: Exception) {}
 
-        // 3. Fallback for non-session media: Extract Title and Artist ONLY if verified as a media notification
+        // 3. Special handler for Google Music Search / Sound Search notifications
+        if (sbn.packageName.contains("googlequicksearchbox")) {
+            val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
+            val text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
+            if (!title.isNullOrBlank() && title != "SingAlong07") {
+                var matchTitle = title
+                var matchArtist = text
+                if ((title.contains("Song", ignoreCase = true) || title.contains("Music", ignoreCase = true)) && !text.isNullOrBlank()) {
+                    if (text.contains(" - ")) {
+                        val parts = text.split(" - ", limit = 2)
+                        matchTitle = parts[0].trim()
+                        matchArtist = parts[1].trim()
+                    } else if (text.contains(" by ", ignoreCase = true)) {
+                        val parts = text.split(Regex("(?i)\\s+by\\s+"), limit = 2)
+                        matchTitle = parts[0].trim()
+                        matchArtist = parts[1].trim()
+                    }
+                }
+                fetchAndSynchronizeLyrics(
+                    rawTitle = matchTitle,
+                    rawArtist = matchArtist,
+                    album = null,
+                    durationMs = 180000L,
+                    sourcePackage = sbn.packageName,
+                    isAudioCaptured = true
+                )
+                return
+            }
+        }
+
+        // 4. Fallback for non-session media: Extract Title and Artist ONLY if verified as a media notification
         val isMediaCategory = sbn.notification.category == Notification.CATEGORY_TRANSPORT
         val hasMediaAction = sbn.notification.actions?.any { action ->
             action.title?.toString()?.matches(Regex("(?i)play|pause|next|prev|previous|skip")) == true
@@ -170,7 +200,8 @@ class MusicTrackingNotificationService : NotificationListenerService() {
         album: String?,
         durationMs: Long,
         sourcePackage: String,
-        preferredSourceOverride: String? = null
+        preferredSourceOverride: String? = null,
+        isAudioCaptured: Boolean = false
     ) {
         val cleaned = TrackMetadataCleaner.clean(rawTitle, rawArtist)
         val trackHash = "${cleaned.artist.lowercase()}__${cleaned.title.lowercase()}__${preferredSourceOverride ?: ""}"
@@ -239,6 +270,7 @@ class MusicTrackingNotificationService : NotificationListenerService() {
             }
 
             // 3. Log into local Room DB Listening History (deduplicated)
+            val isAcousticMatch = isAudioCaptured || sourcePackage.contains("googlequicksearchbox") || sourcePackage == "ambient.audio"
             val latest = app.database.historyDao().getLatestHistory()
             if (latest != null &&
                 latest.trackTitle.equals(cleaned.title, ignoreCase = true) &&
@@ -251,7 +283,8 @@ class MusicTrackingNotificationService : NotificationListenerService() {
                         lyricSource = lyricSource,
                         lyricSyncType = syncType,
                         userOffsetMs = savedOffset,
-                        durationMs = if (durationMs > 0) durationMs else latest.durationMs
+                        durationMs = if (durationMs > 0) durationMs else latest.durationMs,
+                        matchedViaFingerprint = latest.matchedViaFingerprint || isAcousticMatch
                     )
                 )
             } else {
@@ -264,7 +297,8 @@ class MusicTrackingNotificationService : NotificationListenerService() {
                         sourcePackage = sourcePackage,
                         lyricSource = lyricSource,
                         lyricSyncType = syncType,
-                        userOffsetMs = savedOffset
+                        userOffsetMs = savedOffset,
+                        matchedViaFingerprint = isAcousticMatch
                     )
                 )
             }

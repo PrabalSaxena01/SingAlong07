@@ -20,6 +20,28 @@ interface HistoryDao {
         SELECT * FROM listening_history 
         WHERE id IN (
             SELECT MAX(id) FROM listening_history 
+            WHERE matchedViaFingerprint = 1
+            GROUP BY LOWER(TRIM(trackTitle)), LOWER(TRIM(artistName)), timestamp / 600000
+        ) 
+        ORDER BY timestamp DESC LIMIT 500
+    """)
+    fun getAudioCapturedHistoryFlow(): Flow<List<ListeningHistoryEntity>>
+
+    @Query("""
+        SELECT * FROM listening_history 
+        WHERE id IN (
+            SELECT MAX(id) FROM listening_history 
+            WHERE matchedViaFingerprint = 0
+            GROUP BY LOWER(TRIM(trackTitle)), LOWER(TRIM(artistName)), timestamp / 600000
+        ) 
+        ORDER BY timestamp DESC LIMIT 500
+    """)
+    fun getMediaSessionHistoryFlow(): Flow<List<ListeningHistoryEntity>>
+
+    @Query("""
+        SELECT * FROM listening_history 
+        WHERE id IN (
+            SELECT MAX(id) FROM listening_history 
             GROUP BY LOWER(TRIM(trackTitle)), LOWER(TRIM(artistName)), timestamp / 600000
         ) 
         ORDER BY timestamp DESC
