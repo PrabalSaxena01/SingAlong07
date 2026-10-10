@@ -13,9 +13,11 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -52,8 +54,33 @@ class MainActivity : ComponentActivity() {
                     onRequestOverlayPermission = { requestOverlayPermission() },
                     onRequestNotificationPermission = { requestNotificationPermission() },
                     onStartOverlay = { startOverlayService() },
-                    onStopOverlay = { stopOverlayService() }
+                    onStopOverlay = { stopOverlayService() },
+                    onPlayOnYouTube = { trackTitle, artistName -> playOnYouTube(trackTitle, artistName) }
                 )
+            }
+        }
+    }
+
+    private fun playOnYouTube(trackTitle: String, artistName: String) {
+        val query = "$trackTitle $artistName".trim()
+        val appIntent = Intent(Intent.ACTION_SEARCH).apply {
+            setPackage("com.google.android.youtube")
+            putExtra("query", query)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        try {
+            startActivity(appIntent)
+        } catch (_: Exception) {
+            val webIntent = Intent(
+                Intent.ACTION_VIEW,
+                Uri.parse("https://www.youtube.com/results?search_query=" + Uri.encode(query))
+            ).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            try {
+                startActivity(webIntent)
+            } catch (_: Exception) {
+                Toast.makeText(this, "Could not open YouTube", Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -93,7 +120,8 @@ fun MainScreen(
     onRequestOverlayPermission: () -> Unit,
     onRequestNotificationPermission: () -> Unit,
     onStartOverlay: () -> Unit,
-    onStopOverlay: () -> Unit
+    onStopOverlay: () -> Unit,
+    onPlayOnYouTube: (trackTitle: String, artistName: String) -> Unit = { _, _ -> }
 ) {
     val app = SingAlongApp.instance
     val historyList by app.database.historyDao().getAllHistoryFlow().collectAsState(initial = emptyList())
@@ -172,6 +200,7 @@ fun MainScreen(
                     onRequestNotificationPermission = onRequestNotificationPermission,
                     onStartOverlay = onStartOverlay,
                     onStopOverlay = onStopOverlay,
+                    onPlayOnYouTube = onPlayOnYouTube,
                     onExportCsv = {
                         val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
                         exportCsvLauncher.launch("singalong07_history_$timestamp.csv")
@@ -207,6 +236,7 @@ fun HistoryAndControlsTab(
     onRequestNotificationPermission: () -> Unit,
     onStartOverlay: () -> Unit,
     onStopOverlay: () -> Unit,
+    onPlayOnYouTube: (trackTitle: String, artistName: String) -> Unit = { _, _ -> },
     onExportCsv: () -> Unit,
     onClearHistory: () -> Unit
 ) {
@@ -311,7 +341,10 @@ fun HistoryAndControlsTab(
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
                 items(historyList) { item ->
-                    HistoryItemCard(item)
+                    HistoryItemCard(
+                        item = item,
+                        onPlayOnYouTube = { onPlayOnYouTube(item.trackTitle, item.artistName) }
+                    )
                 }
             }
         }
@@ -338,14 +371,18 @@ fun AppSettingsTab(
             Text("Lyrics Providers", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Spacer(modifier = Modifier.height(8.dp))
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 listOf(
                     "auto" to "Auto Best",
                     "jiosaavn" to "Bollywood",
                     "lrclib" to "LRCLIB",
-                    "netease" to "Netease"
+                    "kugou" to "KuGou",
+                    "netease" to "Netease",
+                    "lyricsovh" to "Lyrics.ovh"
                 ).forEach { (id, label) ->
                     val isSelected = settings.preferredProviderId == id
                     FilterChip(
@@ -498,7 +535,10 @@ fun ThemeOptionCard(
 }
 
 @Composable
-fun HistoryItemCard(item: ListeningHistoryEntity) {
+fun HistoryItemCard(
+    item: ListeningHistoryEntity,
+    onPlayOnYouTube: () -> Unit = {}
+) {
     val dateStr = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(item.timestamp))
 
     Surface(
@@ -512,7 +552,7 @@ fun HistoryItemCard(item: ListeningHistoryEntity) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                 Text(text = item.trackTitle, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 Text(text = item.artistName, color = Color.Gray, fontSize = 12.sp)
                 Spacer(modifier = Modifier.height(2.dp))
@@ -531,7 +571,33 @@ fun HistoryItemCard(item: ListeningHistoryEntity) {
                     }
                 }
             }
-            Text(text = dateStr, color = Color.Gray, fontSize = 11.sp)
+
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(text = dateStr, color = Color.Gray, fontSize = 10.sp)
+
+                // Direct Play to YouTube Button
+                FilledTonalButton(
+                    onClick = onPlayOnYouTube,
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                    colors = ButtonDefaults.filledTonalButtonColors(
+                        containerColor = Color(0xFFFF0000).copy(alpha = 0.12f),
+                        contentColor = Color(0xFFFF0000)
+                    ),
+                    modifier = Modifier.height(26.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = "Play on YouTube",
+                        modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(text = "YouTube", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }

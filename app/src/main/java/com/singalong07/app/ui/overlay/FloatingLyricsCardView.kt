@@ -51,6 +51,8 @@ fun FloatingLyricsCardView(
     onNudgeOffset: (Long) -> Unit,
     onSwitchProvider: (String) -> Unit,
     onRetryLyrics: () -> Unit = {},
+    onToggleGhostMode: () -> Unit = {},
+    onOpenEditSearch: () -> Unit = {},
     onOpenSettings: () -> Unit,
     onMinimizeToPill: () -> Unit,
     modifier: Modifier = Modifier
@@ -82,7 +84,7 @@ fun FloatingLyricsCardView(
                 .fillMaxSize()
                 .padding(14.dp)
         ) {
-            // Header: Minimize, Title & Artist, Settings Cog
+            // Header: Minimize, Title & Artist (clickable to edit), Ghost Toggle, Settings Cog
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -97,17 +99,33 @@ fun FloatingLyricsCardView(
                 }
 
                 Column(
-                    modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 6.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable(onClick = onOpenEditSearch),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = trackTitle ?: "SingAlong07",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = colorScheme.activeLineColor,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = trackTitle ?: "SingAlong07",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = colorScheme.activeLineColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit Search",
+                            tint = colorScheme.inactiveLineColor.copy(alpha = 0.7f),
+                            modifier = Modifier.size(11.dp)
+                        )
+                    }
                     Text(
                         text = artistName ?: "Awaiting Playback...",
                         style = MaterialTheme.typography.bodySmall,
@@ -117,12 +135,26 @@ fun FloatingLyricsCardView(
                     )
                 }
 
-                IconButton(onClick = onOpenSettings, modifier = Modifier.size(32.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.Settings,
-                        contentDescription = "Settings",
-                        tint = colorScheme.activeLineColor
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Ghost Icon: Toggle Click-Through Ghost Mode
+                    IconButton(onClick = onToggleGhostMode, modifier = Modifier.size(30.dp)) {
+                        Icon(
+                            imageVector = GhostVector,
+                            contentDescription = if (settings.isClickThroughEnabled) "Ghost Mode Active" else "Enable Ghost Mode",
+                            tint = if (settings.isClickThroughEnabled) colorScheme.accentColor else colorScheme.activeLineColor.copy(alpha = 0.75f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    // Settings Cog
+                    IconButton(onClick = onOpenSettings, modifier = Modifier.size(30.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            tint = colorScheme.activeLineColor,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
 
@@ -159,7 +191,9 @@ fun FloatingLyricsCardView(
                 val providerLabel = when (settings.preferredProviderId) {
                     "jiosaavn" -> "JioSaavn"
                     "lrclib" -> "LRCLIB"
+                    "kugou" -> "KuGou"
                     "netease" -> "Netease"
+                    "lyricsovh" -> "Lyrics.ovh"
                     else -> "Auto Source"
                 }
 
@@ -167,11 +201,13 @@ fun FloatingLyricsCardView(
                     shape = RoundedCornerShape(8.dp),
                     color = colorScheme.surfaceColor,
                     modifier = Modifier.clickable {
-                        // Cycle through providers on click: auto -> jiosaavn -> lrclib -> netease
+                        // Cycle through providers on click: auto -> jiosaavn -> lrclib -> kugou -> netease -> lyricsovh
                         val next = when (settings.preferredProviderId) {
                             "auto" -> "jiosaavn"
                             "jiosaavn" -> "lrclib"
-                            "lrclib" -> "netease"
+                            "lrclib" -> "kugou"
+                            "kugou" -> "netease"
+                            "netease" -> "lyricsovh"
                             else -> "auto"
                         }
                         onSwitchProvider(next)
@@ -246,8 +282,10 @@ fun FloatingLyricsCardView(
                             val searchHint = when (settings.preferredProviderId) {
                                 "jiosaavn" -> "Checking JioSaavn Bollywood..."
                                 "lrclib" -> "Checking LRCLIB database..."
+                                "kugou" -> "Checking KuGou 50M+ database..."
                                 "netease" -> "Checking Netease database..."
-                                else -> "Checking LRCLIB, JioSaavn & Netease..."
+                                "lyricsovh" -> "Checking Lyrics.ovh database..."
+                                else -> "Checking LRCLIB, JioSaavn, KuGou & Netease..."
                             }
                             Text(
                                 text = searchHint,
@@ -265,6 +303,7 @@ fun FloatingLyricsCardView(
                         preferredProviderId = settings.preferredProviderId,
                         colorScheme = colorScheme,
                         onSwitchProvider = onSwitchProvider,
+                        onOpenEditSearch = onOpenEditSearch,
                         onRetry = onRetryLyrics
                     )
                 } else {
@@ -455,6 +494,7 @@ private fun LyricsNotFoundFallbackView(
     preferredProviderId: String,
     colorScheme: OverlayColorScheme,
     onSwitchProvider: (String) -> Unit,
+    onOpenEditSearch: () -> Unit,
     onRetry: () -> Unit
 ) {
     Column(
@@ -529,25 +569,54 @@ private fun LyricsNotFoundFallbackView(
                 onClick = { onSwitchProvider("lrclib") }
             )
             ProviderRetryOption(
+                label = "KuGou (50M+ Synced Tracks)",
+                isSelected = preferredProviderId == "kugou",
+                colorScheme = colorScheme,
+                onClick = { onSwitchProvider("kugou") }
+            )
+            ProviderRetryOption(
                 label = "Netease (Anime / Asian / C-Pop)",
                 isSelected = preferredProviderId == "netease",
                 colorScheme = colorScheme,
                 onClick = { onSwitchProvider("netease") }
             )
+            ProviderRetryOption(
+                label = "Lyrics.ovh (English / Western Plain)",
+                isSelected = preferredProviderId == "lyricsovh",
+                colorScheme = colorScheme,
+                onClick = { onSwitchProvider("lyricsovh") }
+            )
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        OutlinedButton(
-            onClick = onRetry,
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = colorScheme.accentColor),
-            shape = RoundedCornerShape(8.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
-            modifier = Modifier.height(30.dp)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Icon(imageVector = Icons.Default.Refresh, contentDescription = "Retry", modifier = Modifier.size(13.dp))
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(text = "Retry Search", fontSize = 11.sp)
+            OutlinedButton(
+                onClick = onOpenEditSearch,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = colorScheme.accentColor),
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier.weight(1.2f).height(30.dp)
+            ) {
+                Icon(imageVector = Icons.Default.Edit, contentDescription = "Edit Search", modifier = Modifier.size(13.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(text = "Edit Title", fontSize = 11.sp)
+            }
+
+            OutlinedButton(
+                onClick = onRetry,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = colorScheme.accentColor),
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                modifier = Modifier.weight(1f).height(30.dp)
+            ) {
+                Icon(imageVector = Icons.Default.Refresh, contentDescription = "Retry", modifier = Modifier.size(13.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(text = "Retry", fontSize = 11.sp)
+            }
         }
     }
 }

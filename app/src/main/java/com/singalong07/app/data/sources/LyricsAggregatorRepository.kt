@@ -10,7 +10,9 @@ class LyricsAggregatorRepository(
     private val sources: List<LyricsSource> = listOf(
         LrclibSource(),
         JioSaavnSource(),
-        NeteaseSource()
+        NeteaseSource(),
+        KugouSource(),
+        LyricsOvhSource()
     )
 ) {
     private val memoryCache = ConcurrentHashMap<String, LyricsResult>()

@@ -91,7 +91,9 @@ fun ThemeAndFontSettingsSheet(
                             "auto" to "Auto Best",
                             "jiosaavn" to "Bollywood",
                             "lrclib" to "LRCLIB",
-                            "netease" to "Netease"
+                            "kugou" to "KuGou",
+                            "netease" to "Netease",
+                            "lyricsovh" to "Lyrics.ovh"
                         ).forEach { (id, label) ->
                             val isSelected = settings.preferredProviderId == id
                             FilterChip(

@@ -28,6 +28,7 @@ fun FloatingOverlayRoot(
 
     var isExpanded by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showEditSearch by remember { mutableStateOf(false) }
 
     // Resolve active color scheme
     val colorScheme = when (settings.themeMode) {
@@ -79,9 +80,26 @@ fun FloatingOverlayRoot(
                             app.reloadCurrentLyrics(providerId)
                         },
                         onRetryLyrics = { app.reloadCurrentLyrics() },
+                        onToggleGhostMode = { app.preferencesManager.toggleClickThrough(!settings.isClickThroughEnabled) },
+                        onOpenEditSearch = { showEditSearch = true },
                         onOpenSettings = { showSettings = true },
                         onMinimizeToPill = { isExpanded = false }
                     )
+
+                    if (showEditSearch) {
+                        EditSearchLyricsSheet(
+                            initialTitle = currentTitle.orEmpty(),
+                            initialArtist = currentArtist.orEmpty(),
+                            preferredProviderId = settings.preferredProviderId,
+                            colorScheme = colorScheme,
+                            onDismiss = { showEditSearch = false },
+                            onSearch = { title, artist, providerId ->
+                                app.preferencesManager.updatePreferredProvider(providerId)
+                                app.searchLyricsManual(title, artist, providerId)
+                            },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
 
                     if (showSettings) {
                         ThemeAndFontSettingsSheet(

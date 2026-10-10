@@ -23,6 +23,11 @@ class MediaSessionControllerBridge(
     private val _currentArtist = MutableStateFlow<String?>(null)
     val currentArtist: StateFlow<String?> = _currentArtist.asStateFlow()
 
+    fun updateDisplayMetadata(title: String, artist: String?) {
+        _currentTrackTitle.value = title
+        _currentArtist.value = artist
+    }
+
     var onMetadataChangedCallback: ((MediaController) -> Unit)? = null
 
     private val callback = object : MediaController.Callback() {

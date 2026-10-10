@@ -91,6 +91,46 @@ class SingAlongApp : Application() {
         }
     }
 
+    fun searchLyricsManual(
+        title: String,
+        artist: String,
+        providerId: String = "auto"
+    ) {
+        val durationMs = syncEngine.syncState.value.durationMs
+        controllerBridge.updateDisplayMetadata(title, artist)
+
+        appScope.launch {
+            syncEngine.startLoadingLyrics(durationMs)
+            val cleaned = com.singalong07.app.domain.cleaner.TrackMetadataCleaner.clean(title, artist)
+            val result = lyricsRepository.getLyricsCascading(
+                title = cleaned.title,
+                artist = cleaned.artist,
+                durationSeconds = if (durationMs > 0) durationMs / 1000 else null,
+                preferredSourceId = providerId
+            )
+
+            if (result.isSuccess) {
+                val lyrics = result.getOrThrow()
+                if (!lyrics.syncedLrc.isNullOrBlank()) {
+                    val parsed = com.singalong07.app.domain.parser.LrcParser.parse(lyrics.syncedLrc)
+                    syncEngine.loadSyncedLyrics(
+                        lines = parsed.lines,
+                        durationMs = durationMs,
+                        isWordByWord = parsed.isWordByWord,
+                        sourceName = lyrics.sourceName
+                    )
+                } else if (!lyrics.plainLyrics.isNullOrBlank()) {
+                    val safeDuration = if (durationMs > 0) durationMs else 180000L
+                    syncEngine.loadPlainLyricsWithPacingFallback(lyrics.plainLyrics, safeDuration, lyrics.sourceName)
+                } else {
+                    syncEngine.setLyricsNotFound(durationMs)
+                }
+            } else {
+                syncEngine.setLyricsNotFound(durationMs)
+            }
+        }
+    }
+
     private fun createNotificationChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
