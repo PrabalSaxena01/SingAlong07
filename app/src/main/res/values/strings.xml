@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">SingAlong07</string>
+    <string name="overlay_service_title">SingAlong07 Active</string>
+    <string name="overlay_service_desc">Floating lyrics synchronized</string>
+</resources>
