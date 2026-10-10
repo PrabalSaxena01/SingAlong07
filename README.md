@@ -1,4 +1,4 @@
-# FloatingLyrics: Android Floating Timed Lyrics & Scrobbler Companion
+# SingAlong07: Android Floating Timed Lyrics & Scrobbler Companion
 
 A modern, battery-efficient Android application featuring an interactive floating overlay window (`WindowManager` + Jetpack Compose) that seamlessly shifts between a compact floating **Pill** and an expanded **Floating Card**. 
 
@@ -6,23 +6,24 @@ The app intercepts playing media across music players, cleans and guesses track 
 
 ---
 
-## What Was Added & Implemented
+## What Was Built in v1
 
-### 1. Theme Engine & Font Size Selection
-- **Themes**: AMOLED Pure Black, Frosted Glass Blur, Neon Cyberpunk, Paper Light, and Dynamic Album Art Palette extraction.
-- **Font Scaling**: 4 typography presets (`COMPACT`, `BALANCED`, `COMFORTABLE`, `JUMBO`) with dynamic line heights.
-- **Opacity Slider**: Adjustable from 20% to 100% background transparency.
+### 1. Overlay Controls & Pill ↔ Card Morphing
+- **Floating Pill**: Compact capsule with scrolling track marquee, album art orb, and animated equalizer bars.
+- **Floating Card**: Full lyrics sheet with smooth auto-scroll to active line, dynamic themes, and transport controls.
+- **Click-Through Ghost Mode** (`FLAG_NOT_TOUCHABLE`): Let taps pass directly through to background games or reading apps.
 - **Source Code**:
-  - [`OverlayTheme.kt`](src/main/java/com/lyrics/floating/ui/theme/OverlayTheme.kt)
-  - [`OverlayPreferences.kt`](src/main/java/com/lyrics/floating/data/preferences/OverlayPreferences.kt)
-  - [`ThemeAndFontSettingsSheet.kt`](src/main/java/com/lyrics/floating/ui/overlay/ThemeAndFontSettingsSheet.kt)
+  - [`FloatingOverlayService.kt`](app/src/main/java/com/singalong07/app/service/overlay/FloatingOverlayService.kt)
+  - [`FloatingOverlayRoot.kt`](app/src/main/java/com/singalong07/app/ui/overlay/FloatingOverlayRoot.kt)
+  - [`FloatingPillView.kt`](app/src/main/java/com/singalong07/app/ui/overlay/FloatingPillView.kt)
+  - [`FloatingLyricsCardView.kt`](app/src/main/java/com/singalong07/app/ui/overlay/FloatingLyricsCardView.kt)
 
-### 2. Dual-Language Translation & Romanization
-- Displays synchronized translation (English/custom language) or phonetic romanization (Romaji, Pinyin, Hangul) beneath each line.
-- Native API translations (e.g. Netease `tlyric`) merged directly; fallback to on-device ML Kit / cloud translation.
+### 2. Bi-Directional Interactive Playback Control
+- **Interactive Seek-to-Line**: Tapping any lyric line in the floating overlay instantly jumps the active music player (Spotify, YouTube Music) to that exact millisecond.
+- **Transport Controls**: Play/Pause, Next Track, Previous Track, and `[-0.5s]` / `[+0.5s]` timing offset calibration.
 - **Source Code**:
-  - [`DualLanguageLyricLine.kt`](src/main/java/com/lyrics/floating/domain/translation/DualLanguageLyricLine.kt)
-  - [`TranslationEngine.kt`](src/main/java/com/lyrics/floating/domain/translation/TranslationEngine.kt)
+  - [`MediaSessionControllerBridge.kt`](app/src/main/java/com/singalong07/app/service/media/MediaSessionControllerBridge.kt)
+  - [`BiDirectionalSyncEngine.kt`](app/src/main/java/com/singalong07/app/domain/sync/BiDirectionalSyncEngine.kt)
 
 ### 3. Intensive Fallback Sync Pipeline
 - **Tier 1**: Word-by-word syllable karaoke timestamps.
@@ -31,62 +32,82 @@ The app intercepts playing media across music players, cleans and guesses track 
 - **Tier 4**: Acoustic audio fingerprinting match (Chromaprint / AcoustID / ACRCloud).
 - **Tier 5**: Instrumental audio visualizer mode.
 - **Source Code**:
-  - [`BiDirectionalSyncEngine.kt`](src/main/java/com/lyrics/floating/domain/sync/BiDirectionalSyncEngine.kt)
+  - [`BiDirectionalSyncEngine.kt`](app/src/main/java/com/singalong07/app/domain/sync/BiDirectionalSyncEngine.kt)
+  - [`LrcParser.kt`](app/src/main/java/com/singalong07/app/domain/parser/LrcParser.kt)
 
-### 4. Bi-Directional Interactive Playback Control
-- **Overlay to Player**:
-  - Tapping **any lyric line** in the overlay jumps the active music player (Spotify, YT Music) straight to that exact millisecond!
-  - Transport buttons: Play/Pause, Next, Previous, and `[-0.5s]` / `[+0.5s]` offset calibration.
-- **Player to Overlay**:
-  - Real-time `PlaybackStateCompat` updates with 30fps interpolation ticker.
+### 4. Theme Engine & Font Scaling
+- **Themes**: AMOLED Pure Black, Frosted Glass Blur, Neon Cyberpunk, Paper Light, and Dynamic Album Art Palette extraction.
+- **Font Scaling**: 4 typography presets (`COMPACT`, `BALANCED`, `COMFORTABLE`, `JUMBO`) with dynamic line heights.
+- **Opacity Slider**: Adjustable from 20% to 100% background transparency.
 - **Source Code**:
-  - [`MediaSessionControllerBridge.kt`](src/main/java/com/lyrics/floating/service/media/MediaSessionControllerBridge.kt)
-  - [`FloatingLyricsCardView.kt`](src/main/java/com/lyrics/floating/ui/overlay/FloatingLyricsCardView.kt)
+  - [`OverlayTheme.kt`](app/src/main/java/com/singalong07/app/ui/theme/OverlayTheme.kt)
+  - [`OverlayPreferences.kt`](app/src/main/java/com/singalong07/app/data/preferences/OverlayPreferences.kt)
+  - [`ThemeAndFontSettingsSheet.kt`](app/src/main/java/com/singalong07/app/ui/overlay/ThemeAndFontSettingsSheet.kt)
+
+### 5. Multi-Source Lyrics Aggregation
+- Cascades through **Local Storage (.lrc vault)** ➔ **LRCLIB** (free community timed LRC) ➔ **Netease Cloud 163** (vast catalog with synchronized translations and romanized pronunciation) ➔ **Genius / Pacing Fallback**.
+- **Source Code**:
+  - [`LyricsSource.kt`](app/src/main/java/com/singalong07/app/data/sources/LyricsSource.kt)
+  - [`LrclibSource.kt`](app/src/main/java/com/singalong07/app/data/sources/LrclibSource.kt)
+  - [`NeteaseSource.kt`](app/src/main/java/com/singalong07/app/data/sources/NeteaseSource.kt)
+  - [`LocalLrcSource.kt`](app/src/main/java/com/singalong07/app/data/sources/LocalLrcSource.kt)
+  - [`LyricsAggregatorRepository.kt`](app/src/main/java/com/singalong07/app/data/sources/LyricsAggregatorRepository.kt)
+
+### 6. Room Listening History & CSV Export
+- Archives every recognized song, duration, player package, lyric source, and user offset in local SQLite via Room DB.
+- One-tap export to standard RFC-4180 CSV via Android Storage Access Framework (SAF).
+- **Source Code**:
+  - [`SingAlongDatabase.kt`](app/src/main/java/com/singalong07/app/data/db/SingAlongDatabase.kt)
+  - [`ListeningHistoryEntity.kt`](app/src/main/java/com/singalong07/app/data/db/ListeningHistoryEntity.kt)
+  - [`HistoryDao.kt`](app/src/main/java/com/singalong07/app/data/db/HistoryDao.kt)
+  - [`HistoryCsvExporter.kt`](app/src/main/java/com/singalong07/app/data/export/HistoryCsvExporter.kt)
+  - [`MainActivity.kt`](app/src/main/java/com/singalong07/app/ui/main/MainActivity.kt)
 
 ---
 
-## Future Development Roadmap
+## Documentation
 
-- **v1.0 (MVP Foundation)**: Core overlay, LRCLIB integration, notification listener.
-- **v1.2 (Theming & Translation)**: Dynamic palettes, AMOLED black, ML Kit offline translation.
-- **v1.5 (Bi-Directional Sync & History)**: Interactive scrub-to-seek, cadence pacing fallback, Room DB history, CSV export, Pano Scrobbler synergy.
-- **v2.0 (Acoustic AI & Karaoke)**: Android 10+ `AudioPlaybackCapture`, Chromaprint NDK, syllable bouncing ball animation.
-- **v2.5 (Ecosystem Expansion)**: WearOS smartwatch wrist companion, Android Auto dashboard display, social lyric poster generator.
+- **Full Architecture Plan**: [ARCHITECTURE_PLAN.md](docs/ARCHITECTURE_PLAN.md)
+- **Lyrics Sources & API Guide**: [LYRICS_SOURCES_GUIDE.md](docs/LYRICS_SOURCES_GUIDE.md)
 
 ---
 
 ## Project Structure
 
 ```
-floating_lyrics_app/
+SingAlong07/
+├── app/
+│   ├── build.gradle.kts
+│   └── src/
+│       ├── main/
+│       │   ├── AndroidManifest.xml
+│       │   ├── java/com/singalong07/app/
+│       │   │   ├── SingAlongApp.kt
+│       │   │   ├── data/
+│       │   │   │   ├── db/ (Room database, entities & DAO)
+│       │   │   │   ├── export/ (HistoryCsvExporter)
+│       │   │   │   ├── preferences/ (OverlayPreferencesManager)
+│       │   │   │   └── sources/ (LRCLIB, Netease, Local LRC, Aggregator)
+│       │   │   ├── domain/
+│       │   │   │   ├── cleaner/ (TrackMetadataCleaner)
+│       │   │   │   ├── parser/ (LrcParser)
+│       │   │   │   ├── sync/ (BiDirectionalSyncEngine)
+│       │   │   │   └── translation/ (DualLanguageLyricLine & TranslationEngine)
+│       │   │   ├── service/
+│       │   │   │   ├── media/ (MusicTrackingNotificationService & ControllerBridge)
+│       │   │   │   └── overlay/ (FloatingOverlayService WindowManager)
+│       │   │   └── ui/
+│       │   │       ├── main/ (MainActivity)
+│       │   │       ├── overlay/ (FloatingOverlayRoot, PillView, CardView, SettingsSheet)
+│       │   │       └── theme/ (OverlayTheme, Palettes, Typography)
+│       │   └── res/ (strings, xml network security)
+│       └── test/java/com/singalong07/app/ (Unit test suite)
 ├── docs/
-│   ├── ARCHITECTURE_PLAN.md               # Master technical plan & specifications
-│   └── LYRICS_SOURCES_GUIDE.md            # Deep dive on LRCLIB, Netease, Genius & Local LRC
-├── src/main/java/com/lyrics/floating/
-│   ├── data/
-│   │   ├── preferences/
-│   │   │   └── OverlayPreferences.kt      # DataStore preferences & settings
-│   │   └── sources/
-│   │       ├── LyricsSource.kt            # Base source interface & DTO
-│   │       ├── LrclibSource.kt            # LRCLIB API client
-│   │       ├── NeteaseSource.kt           # Netease 163 client (LRC + tlyric + romalrc)
-│   │       ├── LocalLrcSource.kt          # Offline device .lrc file reader
-│   │       └── LyricsAggregatorRepository.kt # Multi-source cascading & cache
-│   ├── domain/
-│   │   ├── sync/
-│   │   │   └── BiDirectionalSyncEngine.kt # 5-tier fallback & seek engine
-│   │   └── translation/
-│   │       ├── DualLanguageLyricLine.kt   # Dual language data model
-│   │       └── TranslationEngine.kt       # Multi-tier translation pipeline
-│   ├── service/
-│   │   └── media/
-│   │       └── MediaSessionControllerBridge.kt # Bi-directional transport bridge
-│   └── ui/
-│       ├── overlay/
-│       │   ├── FloatingLyricsCardView.kt  # Interactive Compose overlay
-│       │   └── ThemeAndFontSettingsSheet.kt # Settings modal
-│       └── theme/
-│           └── OverlayTheme.kt            # Palettes, AMOLED, Neon, typography
-├── scripts/                               # Helper scripts
+│   ├── ARCHITECTURE_PLAN.md
+│   └── LYRICS_SOURCES_GUIDE.md
+├── build.gradle.kts
+├── settings.gradle.kts
+├── gradle.properties
+├── .gitignore
 └── README.md
 ```
