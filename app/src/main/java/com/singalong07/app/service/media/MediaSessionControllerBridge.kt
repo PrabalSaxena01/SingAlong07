@@ -1,10 +1,15 @@
 package com.singalong07.app.service.media
 
+import android.graphics.Bitmap
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.PlaybackState
 import android.os.SystemClock
+import androidx.compose.ui.graphics.Color
+import androidx.palette.graphics.Palette
 import com.singalong07.app.domain.sync.BiDirectionalSyncEngine
+import com.singalong07.app.ui.theme.OverlayColorScheme
+import com.singalong07.app.ui.theme.OverlayThemes
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,6 +27,12 @@ class MediaSessionControllerBridge(
 
     private val _currentArtist = MutableStateFlow<String?>(null)
     val currentArtist: StateFlow<String?> = _currentArtist.asStateFlow()
+
+    private val _albumArtBitmap = MutableStateFlow<Bitmap?>(null)
+    val albumArtBitmap: StateFlow<Bitmap?> = _albumArtBitmap.asStateFlow()
+
+    private val _dynamicColorScheme = MutableStateFlow<OverlayColorScheme?>(null)
+    val dynamicColorScheme: StateFlow<OverlayColorScheme?> = _dynamicColorScheme.asStateFlow()
 
     fun updateDisplayMetadata(title: String, artist: String?) {
         _currentTrackTitle.value = title
@@ -45,6 +56,8 @@ class MediaSessionControllerBridge(
                 _currentTrackTitle.value = title
                 _currentArtist.value = artist
             }
+
+            extractAlbumArtAndPalette(metadata)
 
             activeMediaController?.let { controller ->
                 onMetadataChangedCallback?.invoke(controller)
@@ -74,7 +87,35 @@ class MediaSessionControllerBridge(
             _currentArtist.value = artist
         }
 
+        extractAlbumArtAndPalette(metadata)
+
         handlePlaybackStateChange(controller.playbackState)
+    }
+
+    private fun extractAlbumArtAndPalette(metadata: MediaMetadata?) {
+        if (metadata == null) return
+        val bitmap = metadata.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+            ?: metadata.getBitmap(MediaMetadata.METADATA_KEY_ART)
+            ?: metadata.description?.iconBitmap
+
+        if (bitmap != null) {
+            _albumArtBitmap.value = bitmap
+            try {
+                Palette.from(bitmap).generate { palette ->
+                    if (palette != null) {
+                        val dominant = Color(palette.getDominantColor(0xFF1E2129.toInt()))
+                        val vibrant = Color(palette.getVibrantColor(palette.getLightVibrantColor(0xFF00FFFF.toInt())))
+                        val darkMuted = Color(palette.getDarkMutedColor(palette.getDarkVibrantColor(0xFF0A0E17.toInt())))
+
+                        _dynamicColorScheme.value = OverlayThemes.createDynamicPalette(
+                            dominantColor = dominant,
+                            vibrantColor = vibrant,
+                            darkMutedColor = darkMuted
+                        )
+                    }
+                }
+            } catch (_: Exception) {}
+        }
     }
 
     fun detachMediaController() {

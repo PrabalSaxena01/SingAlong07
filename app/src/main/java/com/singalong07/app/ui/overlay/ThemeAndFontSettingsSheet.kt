@@ -91,6 +91,8 @@ fun ThemeAndFontSettingsSheet(
                             "auto" to "Auto Best",
                             "jiosaavn" to "Bollywood",
                             "lrclib" to "LRCLIB",
+                            "ytmusic" to "YouTube Music",
+                            "genius" to "Genius",
                             "kugou" to "KuGou",
                             "netease" to "Netease",
                             "lyricsovh" to "Lyrics.ovh"

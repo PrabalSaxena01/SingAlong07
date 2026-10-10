@@ -1,8 +1,11 @@
 package com.singalong07.app.ui.overlay
 
+import android.graphics.Bitmap
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,7 +18,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -29,6 +36,9 @@ fun FloatingPillView(
     isPlaying: Boolean,
     colorScheme: OverlayColorScheme,
     onExpandToCard: () -> Unit,
+    albumArt: Bitmap? = null,
+    onDragWindow: (Float, Float) -> Unit = { _, _ -> },
+    onDragWindowEnd: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     // Mini equalizer animation
@@ -49,7 +59,40 @@ fun FloatingPillView(
     Surface(
         modifier = modifier
             .clip(RoundedCornerShape(32.dp))
-            .clickable(onClick = onExpandToCard),
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    var isDrag = false
+                    var accumulatedDelta = Offset.Zero
+                    val pointerId = down.id
+
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                            if (!change.pressed) {
+                                if (!isDrag) {
+                                    onExpandToCard()
+                                }
+                                break
+                            }
+                            val delta = change.position - change.previousPosition
+                            accumulatedDelta += delta
+                            if (!isDrag && accumulatedDelta.getDistance() > viewConfiguration.touchSlop) {
+                                isDrag = true
+                            }
+                            if (isDrag) {
+                                change.consume()
+                                onDragWindow(delta.x, delta.y)
+                            }
+                        }
+                    } finally {
+                        if (isDrag) {
+                            onDragWindowEnd()
+                        }
+                    }
+                }
+            },
         color = colorScheme.backgroundColor.copy(alpha = colorScheme.backgroundAlpha),
         shape = RoundedCornerShape(32.dp),
         shadowElevation = 8.dp
@@ -66,12 +109,23 @@ fun FloatingPillView(
                     .background(colorScheme.accentColor),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.MusicNote,
-                    contentDescription = "Music",
-                    tint = Color.White,
-                    modifier = Modifier.size(16.dp)
-                )
+                if (albumArt != null) {
+                    Image(
+                        bitmap = albumArt.asImageBitmap(),
+                        contentDescription = "Album Art",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape)
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.MusicNote,
+                        contentDescription = "Music",
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.width(8.dp))

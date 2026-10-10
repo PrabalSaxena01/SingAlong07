@@ -17,6 +17,9 @@ import com.singalong07.app.ui.theme.OverlayThemes
 fun FloatingOverlayRoot(
     controllerBridge: MediaSessionControllerBridge,
     onWindowResizeRequested: (isExpanded: Boolean) -> Unit,
+    onRequestFocus: (Boolean) -> Unit = {},
+    onDragWindow: (Float, Float) -> Unit = { _, _ -> },
+    onDragWindowEnd: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val app = SingAlongApp.instance
@@ -25,10 +28,17 @@ fun FloatingOverlayRoot(
 
     val currentTitle by controllerBridge.currentTrackTitle.collectAsState()
     val currentArtist by controllerBridge.currentArtist.collectAsState()
+    val dynamicScheme by controllerBridge.dynamicColorScheme.collectAsState()
+    val albumArtBitmap by controllerBridge.albumArtBitmap.collectAsState()
 
     var isExpanded by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showEditSearch by remember { mutableStateOf(false) }
+
+    // Request soft keyboard window focus when editing search query
+    LaunchedEffect(showEditSearch) {
+        onRequestFocus(showEditSearch)
+    }
 
     // Resolve active color scheme
     val colorScheme = when (settings.themeMode) {
@@ -36,7 +46,7 @@ fun FloatingOverlayRoot(
         OverlayThemeMode.FROSTED_GLASS -> OverlayThemes.FrostedGlass
         OverlayThemeMode.NEON_CYBERPUNK -> OverlayThemes.NeonCyberpunk
         OverlayThemeMode.PAPER_LIGHT -> OverlayThemes.PaperLight
-        OverlayThemeMode.DYNAMIC_PALETTE -> OverlayThemes.FrostedGlass // Fallback when Palette uninitialized
+        OverlayThemeMode.DYNAMIC_PALETTE -> dynamicScheme ?: OverlayThemes.FrostedGlass
     }
 
     // Trigger WindowManager width/height changes when expanded state changes
@@ -74,7 +84,14 @@ fun FloatingOverlayRoot(
                         onTogglePlayPause = { controllerBridge.togglePlayPause() },
                         onSkipNext = { controllerBridge.skipToNext() },
                         onSkipPrevious = { controllerBridge.skipToPrevious() },
-                        onNudgeOffset = { delta -> app.syncEngine.adjustOffset(delta) },
+                        onNudgeOffset = { delta ->
+                            val newOffset = app.syncEngine.adjustOffset(delta)
+                            app.saveTrackOffset(newOffset)
+                        },
+                        onResetOffset = {
+                            app.syncEngine.resetOffset()
+                            app.saveTrackOffset(0L)
+                        },
                         onSwitchProvider = { providerId ->
                             app.preferencesManager.updatePreferredProvider(providerId)
                             app.reloadCurrentLyrics(providerId)
@@ -83,7 +100,9 @@ fun FloatingOverlayRoot(
                         onToggleGhostMode = { app.preferencesManager.toggleClickThrough(!settings.isClickThroughEnabled) },
                         onOpenEditSearch = { showEditSearch = true },
                         onOpenSettings = { showSettings = true },
-                        onMinimizeToPill = { isExpanded = false }
+                        onMinimizeToPill = { isExpanded = false },
+                        onDragWindow = onDragWindow,
+                        onDragWindowEnd = onDragWindowEnd
                     )
 
                     if (showEditSearch) {
@@ -125,7 +144,10 @@ fun FloatingOverlayRoot(
                     artistName = currentArtist ?: "No Media",
                     isPlaying = syncState.isPlaying,
                     colorScheme = colorScheme,
-                    onExpandToCard = { isExpanded = true }
+                    albumArt = albumArtBitmap,
+                    onExpandToCard = { isExpanded = true },
+                    onDragWindow = onDragWindow,
+                    onDragWindowEnd = onDragWindowEnd
                 )
             }
         }

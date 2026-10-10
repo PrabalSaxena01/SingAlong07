@@ -45,6 +45,17 @@ class SingAlongApp : Application() {
 
     private val appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main + kotlinx.coroutines.SupervisorJob())
 
+    fun saveTrackOffset(offsetMs: Long) {
+        val title = controllerBridge.currentTrackTitle.value ?: return
+        val artist = controllerBridge.currentArtist.value ?: ""
+        val trackHash = "${artist.trim().lowercase()}__${title.trim().lowercase()}__"
+        appScope.launch(Dispatchers.IO) {
+            database.historyDao().saveOffsetForTrack(
+                com.singalong07.app.data.db.UserOffsetEntity(trackHash, offsetMs)
+            )
+        }
+    }
+
     fun reloadCurrentLyrics(preferredSourceId: String? = null) {
         val trackingService = com.singalong07.app.service.media.MusicTrackingNotificationService.instance
         if (trackingService != null && trackingService.hasActiveTrack()) {

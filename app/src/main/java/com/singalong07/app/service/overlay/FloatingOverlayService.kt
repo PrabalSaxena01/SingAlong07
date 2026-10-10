@@ -9,6 +9,7 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
 import android.view.*
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -21,8 +22,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.unit.dp
+import com.singalong07.app.ui.overlay.GhostVector
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.*
 import androidx.savedstate.*
@@ -45,6 +49,7 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
     private var overlayComposeView: ComposeView? = null
     private var layoutParams: WindowManager.LayoutParams? = null
     private var controllerBridge: MediaSessionControllerBridge? = null
+    private var isKeyboardFocusActive: Boolean = false
 
     override val lifecycle: Lifecycle get() = lifecycleRegistry
     override val viewModelStore: ViewModelStore get() = serviceViewModelStore
@@ -52,6 +57,7 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
 
     override fun onCreate() {
         super.onCreate()
+        isRunning = true
         savedStateRegistryController.performRestore(null)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
 
@@ -95,12 +101,19 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
                         controllerBridge = bridge,
                         onWindowResizeRequested = { isExpanded ->
                             updateWindowDimensions(isExpanded)
+                        },
+                        onRequestFocus = { needed ->
+                            setKeyboardFocusMode(needed)
+                        },
+                        onDragWindow = { dx, dy ->
+                            updateWindowPosition(dx, dy)
+                        },
+                        onDragWindowEnd = {
+                            onDragWindowEnd()
                         }
                     )
                 }
             }
-
-            setOnTouchListener(createDragTouchListener())
         }
 
         try {
@@ -116,9 +129,6 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
 
     private fun updateWindowDimensions(isExpanded: Boolean) {
         isCurrentWindowExpanded = isExpanded
-        val app = SingAlongApp.instance
-        val isGhostMode = app.preferencesManager.settingsFlow.value.isClickThroughEnabled
-        val shouldGhost = isExpanded && isGhostMode
 
         layoutParams?.let { params ->
             val density = resources.displayMetrics.density
@@ -129,21 +139,84 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
                 params.width = WindowManager.LayoutParams.WRAP_CONTENT
                 params.height = WindowManager.LayoutParams.WRAP_CONTENT
             }
+        }
+        applyWindowFlags()
 
-            // The Pill is NEVER affected by ghost mode! Only expanded card can pass touches.
-            params.flags = if (shouldGhost) {
-                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+        if (isExpanded) {
+            showGhostIconButton()
+        } else {
+            hideGhostIconButton()
+        }
+    }
+
+    private fun applyWindowFlags() {
+        layoutParams?.let { params ->
+            val app = SingAlongApp.instance
+            val isGhost = isCurrentWindowExpanded && app.preferencesManager.settingsFlow.value.isClickThroughEnabled
+
+            if (isKeyboardFocusActive) {
+                // Focusable mode for soft keyboard IME input in EditSearchLyricsSheet
+                params.flags = WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE or WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE
             } else {
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                // The Pill is NEVER affected by ghost mode! Only expanded card passes touches.
+                params.flags = if (isGhost) {
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                } else {
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                }
+                params.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_STATE_UNSPECIFIED
             }
 
-            windowManager?.updateViewLayout(overlayComposeView, params)
+            try {
+                windowManager?.updateViewLayout(overlayComposeView, params)
+            } catch (_: Exception) {}
         }
+    }
 
-        if (shouldGhost) {
-            showExitGhostButton()
-        } else {
-            hideExitGhostButton()
+    private fun setKeyboardFocusMode(enabled: Boolean) {
+        isKeyboardFocusActive = enabled
+        applyWindowFlags()
+    }
+
+    private fun updateWindowPosition(deltaX: Float, deltaY: Float) {
+        layoutParams?.let { params ->
+            val displayMetrics = resources.displayMetrics
+            val screenWidth = displayMetrics.widthPixels
+            val screenHeight = displayMetrics.heightPixels
+            val density = displayMetrics.density
+
+            val newX = (params.x + deltaX).toInt().coerceIn(-100, screenWidth - 50)
+            val newY = (params.y + deltaY).toInt().coerceIn(10, screenHeight - 20)
+
+            params.x = newX
+            params.y = newY
+
+            try {
+                windowManager?.updateViewLayout(overlayComposeView, params)
+            } catch (_: Exception) {}
+
+            exitGhostLayoutParams?.let { ghostParams ->
+                ghostParams.x = params.x + (276 * density).toInt()
+                ghostParams.y = (params.y - 10 * density).toInt().coerceAtLeast(10)
+                try {
+                    windowManager?.updateViewLayout(exitGhostComposeView, ghostParams)
+                } catch (_: Exception) {}
+            }
+        }
+    }
+
+    private fun onDragWindowEnd() {
+        val params = layoutParams ?: return
+        val displayMetrics = resources.displayMetrics
+        val screenHeight = displayMetrics.heightPixels
+        val density = displayMetrics.density
+        // Bottom dismiss threshold: dropped within bottom 140dp of screen
+        val dismissThreshold = screenHeight - (140 * density).toInt()
+
+        if (params.y > dismissThreshold) {
+            Toast.makeText(this, "Overlay closed", Toast.LENGTH_SHORT).show()
+            stopSelf()
         }
     }
 
@@ -160,22 +233,12 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
         val app = SingAlongApp.instance
         serviceScope.launch {
             app.preferencesManager.settingsFlow.collectLatest { settings ->
-                val shouldGhost = isCurrentWindowExpanded && settings.isClickThroughEnabled
+                applyWindowFlags()
 
-                layoutParams?.let { params ->
-                    // The Pill is NEVER affected by ghost mode!
-                    params.flags = if (shouldGhost) {
-                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                    } else {
-                        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                    }
-                    windowManager?.updateViewLayout(overlayComposeView, params)
-                }
-
-                if (shouldGhost) {
-                    showExitGhostButton()
+                if (isCurrentWindowExpanded) {
+                    showGhostIconButton()
                 } else {
-                    hideExitGhostButton()
+                    hideGhostIconButton()
                 }
 
                 val notificationManager = getSystemService(android.app.NotificationManager::class.java)
@@ -184,7 +247,7 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
         }
     }
 
-    private fun showExitGhostButton() {
+    private fun showGhostIconButton() {
         if (exitGhostComposeView != null) return
 
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -199,8 +262,8 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
         val cardY = layoutParams?.y ?: 200
 
         exitGhostLayoutParams = WindowManager.LayoutParams(
-            (44 * density).toInt(),
-            (44 * density).toInt(),
+            (42 * density).toInt(),
+            (42 * density).toInt(),
             type,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
@@ -217,25 +280,27 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
 
             setContent {
                 val app = SingAlongApp.instance
+                val settings by app.preferencesManager.settingsFlow.collectAsState()
+                val isGhost = settings.isClickThroughEnabled
+
                 Surface(
                     shape = CircleShape,
-                    color = Color(0xFF0F172A),
-                    border = BorderStroke(2.dp, Color(0xFF00FFFF)),
-                    shadowElevation = 8.dp,
+                    color = Color(0x330F172A), // Light translucent background, no blue ring!
+                    shadowElevation = 0.dp,
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(36.dp)
                         .clickable {
-                            // Cross icon is NEVER affected by ghost: tap immediately exits ghost mode!
-                            app.preferencesManager.toggleClickThrough(false)
+                            // Ghost icon at top-right toggles ghost mode!
+                            app.preferencesManager.toggleClickThrough(!isGhost)
                         }
                 ) {
                     Box(
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Exit Ghost Mode",
-                            tint = Color(0xFF00FFFF),
+                            imageVector = GhostVector,
+                            contentDescription = if (isGhost) "Exit Ghost Mode" else "Enable Ghost Mode",
+                            tint = if (isGhost) Color(0xFF00FFFF).copy(alpha = 0.85f) else Color.White.copy(alpha = 0.50f), // Light opacity
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -248,47 +313,13 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
         } catch (_: Exception) {}
     }
 
-    private fun hideExitGhostButton() {
+    private fun hideGhostIconButton() {
         exitGhostComposeView?.let { view ->
             try {
                 windowManager?.removeView(view)
             } catch (_: Exception) {}
             exitGhostComposeView = null
             exitGhostLayoutParams = null
-        }
-    }
-
-    private fun createDragTouchListener(): View.OnTouchListener {
-        return object : View.OnTouchListener {
-            private var initialX = 0
-            private var initialY = 0
-            private var initialTouchX = 0f
-            private var initialTouchY = 0f
-
-            override fun onTouch(v: View, event: MotionEvent): Boolean {
-                val params = layoutParams ?: return false
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        initialX = params.x
-                        initialY = params.y
-                        initialTouchX = event.rawX
-                        initialTouchY = event.rawY
-                        return false // Allow child clicks if not dragging
-                    }
-                    MotionEvent.ACTION_MOVE -> {
-                        val deltaX = (event.rawX - initialTouchX).toInt()
-                        val deltaY = (event.rawY - initialTouchY).toInt()
-
-                        if (Math.abs(deltaX) > 10 || Math.abs(deltaY) > 10) {
-                            params.x = initialX + deltaX
-                            params.y = initialY + deltaY
-                            windowManager?.updateViewLayout(overlayComposeView, params)
-                            return true
-                        }
-                    }
-                }
-                return false
-            }
         }
     }
 
@@ -337,11 +368,15 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
         overlayComposeView?.let {
             windowManager?.removeView(it)
         }
+        hideGhostIconButton()
+        isRunning = false
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
+        var isRunning: Boolean = false
+            private set
         private const val NOTIFICATION_ID = 7007
         const val ACTION_TOGGLE_GHOST_MODE = "com.singalong07.app.ACTION_TOGGLE_GHOST_MODE"
     }

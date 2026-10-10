@@ -166,13 +166,40 @@ class BiDirectionalSyncEngine {
 
     fun adjustOffset(deltaMs: Long): Long {
         currentUserOffsetMs += deltaMs
-        _syncState.update { it.copy(userOffsetMs = currentUserOffsetMs) }
+        val effectivePosition = _syncState.value.currentPositionMs + currentUserOffsetMs
+        val lineIndex = binarySearchActiveLine(effectivePosition)
+        _syncState.update {
+            it.copy(
+                userOffsetMs = currentUserOffsetMs,
+                activeLineIndex = lineIndex
+            )
+        }
         return currentUserOffsetMs
+    }
+
+    fun resetOffset(): Long {
+        currentUserOffsetMs = 0L
+        val effectivePosition = _syncState.value.currentPositionMs
+        val lineIndex = binarySearchActiveLine(effectivePosition)
+        _syncState.update {
+            it.copy(
+                userOffsetMs = 0L,
+                activeLineIndex = lineIndex
+            )
+        }
+        return 0L
     }
 
     fun setOffset(offsetMs: Long) {
         currentUserOffsetMs = offsetMs
-        _syncState.update { it.copy(userOffsetMs = currentUserOffsetMs) }
+        val effectivePosition = _syncState.value.currentPositionMs + currentUserOffsetMs
+        val lineIndex = binarySearchActiveLine(effectivePosition)
+        _syncState.update {
+            it.copy(
+                userOffsetMs = currentUserOffsetMs,
+                activeLineIndex = lineIndex
+            )
+        }
     }
 
     /**

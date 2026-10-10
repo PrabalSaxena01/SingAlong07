@@ -10,6 +10,8 @@ class LyricsAggregatorRepository(
     private val sources: List<LyricsSource> = listOf(
         LrclibSource(),
         JioSaavnSource(),
+        YouTubeMusicSource(),
+        GeniusSource(),
         NeteaseSource(),
         KugouSource(),
         LyricsOvhSource()
@@ -18,6 +20,12 @@ class LyricsAggregatorRepository(
     private val memoryCache = ConcurrentHashMap<String, LyricsResult>()
 
     fun getAllSources(): List<LyricsSource> = sources
+
+    fun getCachedLyricsCount(): Int = memoryCache.size
+
+    fun clearCache() {
+        memoryCache.clear()
+    }
 
     suspend fun getLyricsCascading(
         title: String,

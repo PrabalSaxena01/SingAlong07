@@ -14,10 +14,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.singalong07.app.ui.theme.OverlayColorScheme
+import kotlinx.coroutines.delay
 
 @Composable
 fun EditSearchLyricsSheet(
@@ -32,6 +36,15 @@ fun EditSearchLyricsSheet(
     var titleText by remember(initialTitle) { mutableStateOf(initialTitle) }
     var artistText by remember(initialArtist) { mutableStateOf(initialArtist) }
     var selectedProvider by remember(preferredProviderId) { mutableStateOf(preferredProviderId) }
+
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    LaunchedEffect(Unit) {
+        delay(150)
+        focusRequester.requestFocus()
+        keyboardController?.show()
+    }
 
     Card(
         modifier = modifier
@@ -69,7 +82,13 @@ fun EditSearchLyricsSheet(
                     )
                 }
 
-                IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                IconButton(
+                    onClick = {
+                        keyboardController?.hide()
+                        onDismiss()
+                    },
+                    modifier = Modifier.size(28.dp)
+                ) {
                     Icon(imageVector = Icons.Default.Close, contentDescription = "Close", modifier = Modifier.size(18.dp))
                 }
             }
@@ -100,7 +119,9 @@ fun EditSearchLyricsSheet(
                         onValueChange = { titleText = it },
                         singleLine = true,
                         placeholder = { Text("e.g. Kesariya", fontSize = 12.sp) },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .focusRequester(focusRequester)
                     )
                 }
 
@@ -131,6 +152,8 @@ fun EditSearchLyricsSheet(
                             "auto" to "Auto Best",
                             "jiosaavn" to "Bollywood",
                             "lrclib" to "LRCLIB",
+                            "ytmusic" to "YouTube Music",
+                            "genius" to "Genius",
                             "kugou" to "KuGou",
                             "netease" to "Netease",
                             "lyricsovh" to "Lyrics.ovh"
@@ -153,7 +176,10 @@ fun EditSearchLyricsSheet(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     OutlinedButton(
-                        onClick = onDismiss,
+                        onClick = {
+                            keyboardController?.hide()
+                            onDismiss()
+                        },
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(1f)
                     ) {
@@ -162,6 +188,7 @@ fun EditSearchLyricsSheet(
 
                     Button(
                         onClick = {
+                            keyboardController?.hide()
                             if (titleText.isNotBlank()) {
                                 onSearch(titleText.trim(), artistText.trim(), selectedProvider)
                                 onDismiss()

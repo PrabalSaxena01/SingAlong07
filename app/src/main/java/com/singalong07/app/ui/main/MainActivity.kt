@@ -21,6 +21,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -29,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -158,7 +161,7 @@ fun MainScreen(
                     }
                 },
                 actions = {
-                    if (selectedTab == 0) {
+                    if (selectedTab == 1) {
                         IconButton(onClick = {
                             val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
                             exportCsvLauncher.launch("singalong07_history_$timestamp.csv")
@@ -174,14 +177,20 @@ fun MainScreen(
                 NavigationBarItem(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    icon = { Icon(Icons.Default.QueueMusic, contentDescription = "History") },
-                    label = { Text("History & Player") }
+                    icon = { Icon(Icons.Default.PlayCircle, contentDescription = "Player") },
+                    label = { Text("Player") }
                 )
                 NavigationBarItem(
                     selected = selectedTab == 1,
                     onClick = { selectedTab = 1 },
+                    icon = { Icon(Icons.Default.QueueMusic, contentDescription = "History") },
+                    label = { Text("History") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
                     icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
-                    label = { Text("App Settings") }
+                    label = { Text("Settings") }
                 )
             }
         }
@@ -192,125 +201,279 @@ fun MainScreen(
                 .padding(padding)
                 .padding(horizontal = 16.dp)
         ) {
-            if (selectedTab == 0) {
-                // Tab 0: History & Service Controls
-                HistoryAndControlsTab(
-                    historyList = historyList,
-                    onRequestOverlayPermission = onRequestOverlayPermission,
-                    onRequestNotificationPermission = onRequestNotificationPermission,
-                    onStartOverlay = onStartOverlay,
-                    onStopOverlay = onStopOverlay,
-                    onPlayOnYouTube = onPlayOnYouTube,
-                    onExportCsv = {
-                        val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
-                        exportCsvLauncher.launch("singalong07_history_$timestamp.csv")
-                    },
-                    onClearHistory = {
-                        coroutineScope.launch { app.database.historyDao().clearHistory() }
-                    }
-                )
-            } else {
-                // Tab 1: Full In-App Settings & Providers
-                AppSettingsTab(
-                    settings = settings,
-                    onUpdateTheme = { app.preferencesManager.updateTheme(it) },
-                    onUpdateFontScale = { app.preferencesManager.updateFontScale(it) },
-                    onUpdateOpacity = { app.preferencesManager.updateOpacity(it) },
-                    onToggleTranslation = { app.preferencesManager.toggleTranslation(it) },
-                    onToggleRomanization = { app.preferencesManager.toggleRomanization(it) },
-                    onToggleClickThrough = { app.preferencesManager.toggleClickThrough(it) },
-                    onUpdateProvider = {
-                        app.preferencesManager.updatePreferredProvider(it)
-                        app.reloadCurrentLyrics(it)
-                    }
-                )
+            when (selectedTab) {
+                0 -> {
+                    // Tab 0: Overlay Service & Live Player Controls
+                    PlayerAndOverlayTab(
+                        onRequestOverlayPermission = onRequestOverlayPermission,
+                        onRequestNotificationPermission = onRequestNotificationPermission,
+                        onStartOverlay = onStartOverlay,
+                        onStopOverlay = onStopOverlay
+                    )
+                }
+                1 -> {
+                    // Tab 1: Dedicated Listening History
+                    ListeningHistoryTab(
+                        historyList = historyList,
+                        onPlayOnYouTube = onPlayOnYouTube,
+                        onExportCsv = {
+                            val timestamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
+                            exportCsvLauncher.launch("singalong07_history_$timestamp.csv")
+                        },
+                        onClearHistory = {
+                            coroutineScope.launch { app.database.historyDao().clearHistory() }
+                        }
+                    )
+                }
+                2 -> {
+                    // Tab 2: Full App Settings, Providers, & Cache Control
+                    AppSettingsTab(
+                        settings = settings,
+                        onUpdateTheme = { app.preferencesManager.updateTheme(it) },
+                        onUpdateFontScale = { app.preferencesManager.updateFontScale(it) },
+                        onUpdateOpacity = { app.preferencesManager.updateOpacity(it) },
+                        onToggleTranslation = { app.preferencesManager.toggleTranslation(it) },
+                        onToggleRomanization = { app.preferencesManager.toggleRomanization(it) },
+                        onToggleClickThrough = { app.preferencesManager.toggleClickThrough(it) },
+                        onUpdateProvider = {
+                            app.preferencesManager.updatePreferredProvider(it)
+                            app.reloadCurrentLyrics(it)
+                        }
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun HistoryAndControlsTab(
-    historyList: List<ListeningHistoryEntity>,
+fun PlayerAndOverlayTab(
     onRequestOverlayPermission: () -> Unit,
     onRequestNotificationPermission: () -> Unit,
     onStartOverlay: () -> Unit,
-    onStopOverlay: () -> Unit,
-    onPlayOnYouTube: (trackTitle: String, artistName: String) -> Unit = { _, _ -> },
-    onExportCsv: () -> Unit,
-    onClearHistory: () -> Unit
+    onStopOverlay: () -> Unit
 ) {
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Permission & Service Control Card
-        Card(
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("Overlay Controls & Permissions", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Spacer(modifier = Modifier.height(10.dp))
+    val app = SingAlongApp.instance
+    val currentTitle by app.controllerBridge.currentTrackTitle.collectAsState()
+    val currentArtist by app.controllerBridge.currentArtist.collectAsState()
+    val syncState by app.syncEngine.syncState.collectAsState()
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = onStartOverlay,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1DB954)),
-                        modifier = Modifier.weight(1f)
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        contentPadding = PaddingValues(vertical = 12.dp)
+    ) {
+        item {
+            // Permission & Service Control Card
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Launch Overlay")
+                        Text("Overlay Controls & Permissions", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(if (FloatingOverlayService.isRunning) Color(0xFF1DB954) else Color.Gray)
+                        )
                     }
-                    OutlinedButton(
-                        onClick = onStopOverlay,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Stop Overlay")
-                    }
-                }
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                Spacer(modifier = Modifier.height(10.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilledTonalButton(
-                        onClick = onRequestOverlayPermission,
-                        modifier = Modifier.weight(1f)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Overlay Access", fontSize = 11.sp)
+                        Button(
+                            onClick = onStartOverlay,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1DB954)),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Layers, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Launch")
+                        }
+                        OutlinedButton(
+                            onClick = onStopOverlay,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Stop")
+                        }
                     }
-                    FilledTonalButton(
-                        onClick = onRequestNotificationPermission,
-                        modifier = Modifier.weight(1f)
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text("Notification Sync", fontSize = 11.sp)
+                        FilledTonalButton(
+                            onClick = onRequestOverlayPermission,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Overlay Access", fontSize = 11.sp)
+                        }
+                        FilledTonalButton(
+                            onClick = onRequestNotificationPermission,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Notification Sync", fontSize = 11.sp)
+                        }
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        item {
+            // Live Now Playing Card
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Now Playing Live Monitor",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
 
-        // History Section Header
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer,
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = if (syncState.isPlaying) Icons.Default.MusicNote else Icons.Default.Pause,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = currentTitle ?: "No Music Detected",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = currentArtist ?: "Start playback in any media player",
+                                fontSize = 12.sp,
+                                color = Color.Gray,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (!syncState.sourceName.isNullOrBlank()) {
+                                Text(
+                                    text = "Synced via ${syncState.sourceName}",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF1DB954)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Transport controls
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { app.controllerBridge.skipToPrevious() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Prev")
+                        }
+                        FilledIconButton(
+                            onClick = { app.controllerBridge.togglePlayPause() },
+                            colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Icon(
+                                imageVector = if (syncState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = "Play/Pause"
+                            )
+                        }
+                        IconButton(onClick = { app.controllerBridge.skipToNext() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next")
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            // Supported Universal Players Card
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text("Supported Universal Media Players", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Spotify • YouTube Music • Apple Music • JioSaavn • Amazon Music • Gaana • SoundCloud • Poweramp • VLC • YouTube App",
+                        fontSize = 11.sp,
+                        color = Color.Gray,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ListeningHistoryTab(
+    historyList: List<ListeningHistoryEntity>,
+    onPlayOnYouTube: (trackTitle: String, artistName: String) -> Unit = { _, _ -> },
+    onExportCsv: () -> Unit,
+    onClearHistory: () -> Unit
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = "Listening History (${historyList.size})",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
+            Column {
+                Text(
+                    text = "Listening History (${historyList.size})",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Deduplicated tracks with 1-tap YouTube play",
+                    fontSize = 11.sp,
+                    color = Color.Gray
+                )
+            }
 
             Row {
                 TextButton(onClick = onExportCsv) {
                     Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Export CSV", fontSize = 12.sp)
+                    Text("Export", fontSize = 12.sp)
                 }
 
                 if (historyList.isNotEmpty()) {
@@ -321,19 +484,25 @@ fun HistoryAndControlsTab(
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // History List
         if (historyList.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = "Play music in Spotify, YouTube, or Apple Music to start syncing lyrics!",
-                    color = Color.Gray,
-                    fontSize = 13.sp
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.QueueMusic, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(48.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "No tracks played yet",
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.Gray
+                    )
+                    Text(
+                        text = "Play songs in YouTube Music, Spotify, or any player to track history",
+                        fontSize = 12.sp,
+                        color = Color.Gray
+                    )
+                }
             }
         } else {
             LazyColumn(
@@ -362,6 +531,10 @@ fun AppSettingsTab(
     onToggleClickThrough: (Boolean) -> Unit,
     onUpdateProvider: (String) -> Unit
 ) {
+    val app = SingAlongApp.instance
+    val coroutineScope = rememberCoroutineScope()
+    var cachedLyricsCount by remember { mutableIntStateOf(app.lyricsRepository.getCachedLyricsCount()) }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -380,6 +553,8 @@ fun AppSettingsTab(
                     "auto" to "Auto Best",
                     "jiosaavn" to "Bollywood",
                     "lrclib" to "LRCLIB",
+                    "ytmusic" to "YouTube Music",
+                    "genius" to "Genius",
                     "kugou" to "KuGou",
                     "netease" to "Netease",
                     "lyricsovh" to "Lyrics.ovh"
@@ -400,38 +575,46 @@ fun AppSettingsTab(
             Text("Overlay Appearance", fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Spacer(modifier = Modifier.height(8.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                ThemeOptionCard(
-                    label = "Amoled",
-                    color = Color.Black,
-                    isSelected = settings.themeMode == OverlayThemeMode.AMOLED_DARK,
-                    onClick = { onUpdateTheme(OverlayThemeMode.AMOLED_DARK) },
-                    modifier = Modifier.weight(1f)
-                )
-                ThemeOptionCard(
-                    label = "Frosted",
-                    color = Color(0xFF2C3240),
-                    isSelected = settings.themeMode == OverlayThemeMode.FROSTED_GLASS,
-                    onClick = { onUpdateTheme(OverlayThemeMode.FROSTED_GLASS) },
-                    modifier = Modifier.weight(1f)
-                )
-                ThemeOptionCard(
-                    label = "Neon",
-                    color = Color(0xFF00FFFF),
-                    isSelected = settings.themeMode == OverlayThemeMode.NEON_CYBERPUNK,
-                    onClick = { onUpdateTheme(OverlayThemeMode.NEON_CYBERPUNK) },
-                    modifier = Modifier.weight(1f)
-                )
-                ThemeOptionCard(
-                    label = "Palette",
-                    color = Color(0xFFE91E63),
-                    isSelected = settings.themeMode == OverlayThemeMode.DYNAMIC_PALETTE,
-                    onClick = { onUpdateTheme(OverlayThemeMode.DYNAMIC_PALETTE) },
-                    modifier = Modifier.weight(1f)
-                )
+            // 2x2 Grid prevents label clipping on narrower screens
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ThemeOptionCard(
+                        label = "Amoled",
+                        color = Color.Black,
+                        isSelected = settings.themeMode == OverlayThemeMode.AMOLED_DARK,
+                        onClick = { onUpdateTheme(OverlayThemeMode.AMOLED_DARK) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    ThemeOptionCard(
+                        label = "Frosted",
+                        color = Color(0xFF2C3240),
+                        isSelected = settings.themeMode == OverlayThemeMode.FROSTED_GLASS,
+                        onClick = { onUpdateTheme(OverlayThemeMode.FROSTED_GLASS) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ThemeOptionCard(
+                        label = "Neon",
+                        color = Color(0xFF00FFFF),
+                        isSelected = settings.themeMode == OverlayThemeMode.NEON_CYBERPUNK,
+                        onClick = { onUpdateTheme(OverlayThemeMode.NEON_CYBERPUNK) },
+                        modifier = Modifier.weight(1f)
+                    )
+                    ThemeOptionCard(
+                        label = "Palette",
+                        color = Color(0xFFE91E63),
+                        isSelected = settings.themeMode == OverlayThemeMode.DYNAMIC_PALETTE,
+                        onClick = { onUpdateTheme(OverlayThemeMode.DYNAMIC_PALETTE) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
         }
 
@@ -439,7 +622,9 @@ fun AppSettingsTab(
             Text("Typography Scale", fontSize = 14.sp)
             Spacer(modifier = Modifier.height(6.dp))
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 LyricFontScale.values().forEach { scale ->
@@ -469,33 +654,109 @@ fun AppSettingsTab(
             Text("Internationalization & Accessibility", fontWeight = FontWeight.Bold, fontSize = 16.sp)
 
             Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Show Translated Sub-lines", fontSize = 14.sp)
+                Text(
+                    text = "Show Translated Sub-lines",
+                    modifier = Modifier.weight(1f).padding(end = 8.dp),
+                    fontSize = 14.sp
+                )
                 Switch(checked = settings.isTranslationEnabled, onCheckedChange = onToggleTranslation)
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Show Romanized Pronunciation (Romaji/Pinyin)", fontSize = 14.sp)
+                Text(
+                    text = "Show Romanized Pronunciation (Romaji/Pinyin)",
+                    modifier = Modifier.weight(1f).padding(end = 8.dp),
+                    fontSize = 14.sp
+                )
                 Switch(checked = settings.isRomanizationEnabled, onCheckedChange = onToggleRomanization)
             }
 
             Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
+                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                     Text("Click-Through Ghost Mode", fontSize = 14.sp)
                     Text("Taps pass directly to background apps", fontSize = 11.sp, color = Color.Gray)
                 }
                 Switch(checked = settings.isClickThroughEnabled, onCheckedChange = onToggleClickThrough)
+            }
+        }
+
+        item {
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(8.dp))
+            Text("Cache & Storage Management", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Card(
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text("Lyrics In-Memory Cache", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text("$cachedLyricsCount songs stored in RAM", fontSize = 12.sp, color = Color.Gray)
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                app.lyricsRepository.clearCache()
+                                cachedLyricsCount = 0
+                                Toast.makeText(app, "Lyrics cache cleared!", Toast.LENGTH_SHORT).show()
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Text("Clear Cache", fontSize = 11.sp)
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text("Manual Sync Calibrations", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text("Saved per-track timing offsets", fontSize = 12.sp, color = Color.Gray)
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                coroutineScope.launch {
+                                    app.database.historyDao().clearOffsets()
+                                    Toast.makeText(app, "All timing calibrations reset!", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.height(32.dp)
+                        ) {
+                            Text("Reset Offsets", fontSize = 11.sp)
+                        }
+                    }
+                }
             }
         }
     }

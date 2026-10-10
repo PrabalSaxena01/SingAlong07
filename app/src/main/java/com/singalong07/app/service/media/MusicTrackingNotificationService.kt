@@ -230,19 +230,36 @@ class MusicTrackingNotificationService : NotificationListenerService() {
                 }
             }
 
-            // 3. Log into local Room DB Listening History
-            app.database.historyDao().insertHistory(
-                ListeningHistoryEntity(
-                    trackTitle = cleaned.title,
-                    artistName = cleaned.artist,
-                    albumName = album,
-                    durationMs = durationMs,
-                    sourcePackage = sourcePackage,
-                    lyricSource = lyricSource,
-                    lyricSyncType = syncType,
-                    userOffsetMs = savedOffset
+            // 3. Log into local Room DB Listening History (deduplicated)
+            val latest = app.database.historyDao().getLatestHistory()
+            if (latest != null &&
+                latest.trackTitle.equals(cleaned.title, ignoreCase = true) &&
+                latest.artistName.equals(cleaned.artist, ignoreCase = true) &&
+                Math.abs(System.currentTimeMillis() - latest.timestamp) < 600_000L
+            ) {
+                app.database.historyDao().updateHistory(
+                    latest.copy(
+                        timestamp = System.currentTimeMillis(),
+                        lyricSource = lyricSource,
+                        lyricSyncType = syncType,
+                        userOffsetMs = savedOffset,
+                        durationMs = if (durationMs > 0) durationMs else latest.durationMs
+                    )
                 )
-            )
+            } else {
+                app.database.historyDao().insertHistory(
+                    ListeningHistoryEntity(
+                        trackTitle = cleaned.title,
+                        artistName = cleaned.artist,
+                        albumName = album,
+                        durationMs = durationMs,
+                        sourcePackage = sourcePackage,
+                        lyricSource = lyricSource,
+                        lyricSyncType = syncType,
+                        userOffsetMs = savedOffset
+                    )
+                )
+            }
         }
     }
 

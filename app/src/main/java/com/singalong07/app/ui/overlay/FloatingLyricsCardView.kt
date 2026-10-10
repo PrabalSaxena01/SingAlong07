@@ -4,6 +4,8 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -23,7 +25,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -35,6 +39,7 @@ import com.singalong07.app.domain.sync.SyncResolutionTier
 import com.singalong07.app.domain.translation.DualLanguageLyricLine
 import com.singalong07.app.ui.theme.LyricFontScale
 import com.singalong07.app.ui.theme.OverlayColorScheme
+import kotlinx.coroutines.launch
 
 @Composable
 fun FloatingLyricsCardView(
@@ -49,17 +54,38 @@ fun FloatingLyricsCardView(
     onSkipNext: () -> Unit,
     onSkipPrevious: () -> Unit,
     onNudgeOffset: (Long) -> Unit,
+    onResetOffset: () -> Unit = {},
     onSwitchProvider: (String) -> Unit,
     onRetryLyrics: () -> Unit = {},
     onToggleGhostMode: () -> Unit = {},
     onOpenEditSearch: () -> Unit = {},
     onOpenSettings: () -> Unit,
     onMinimizeToPill: () -> Unit,
+    onDragWindow: (Float, Float) -> Unit = { _, _ -> },
+    onDragWindowEnd: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
     var isUserScrubbing by remember { mutableStateOf(false) }
     var scrubProgress by remember { mutableFloatStateOf(0f) }
+
+    val isCurrentLineVisible by remember(syncState.activeLineIndex) {
+        derivedStateOf {
+            if (syncState.activeLineIndex < 0) true
+            else {
+                val visibleIndices = listState.layoutInfo.visibleItemsInfo.map { it.index }
+                syncState.activeLineIndex in visibleIndices
+            }
+        }
+    }
+
+    val isLineAbove by remember(syncState.activeLineIndex) {
+        derivedStateOf {
+            val firstIndex = listState.layoutInfo.visibleItemsInfo.firstOrNull()?.index ?: 0
+            syncState.activeLineIndex < firstIndex
+        }
+    }
 
     // When track title changes, immediately reset scroll to top
     LaunchedEffect(trackTitle) {
@@ -84,7 +110,52 @@ fun FloatingLyricsCardView(
                 .fillMaxSize()
                 .padding(14.dp)
         ) {
-            // Header: Minimize, Title & Artist (clickable to edit), Ghost Toggle, Settings Cog
+            // Subtle top drag handle for moving and bottom-dismissing overlay card
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            var isDrag = false
+                            var accumulatedDelta = Offset.Zero
+                            val pointerId = down.id
+
+                            try {
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val change = event.changes.firstOrNull { it.id == pointerId } ?: break
+                                    if (!change.pressed) break
+                                    val delta = change.position - change.previousPosition
+                                    accumulatedDelta += delta
+                                    if (!isDrag && accumulatedDelta.getDistance() > viewConfiguration.touchSlop) {
+                                        isDrag = true
+                                    }
+                                    if (isDrag) {
+                                        change.consume()
+                                        onDragWindow(delta.x, delta.y)
+                                    }
+                                }
+                            } finally {
+                                if (isDrag) {
+                                    onDragWindowEnd()
+                                }
+                            }
+                        }
+                    }
+                    .padding(bottom = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(38.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(colorScheme.inactiveLineColor.copy(alpha = 0.35f))
+                )
+            }
+
+            // Header: Minimize, Title & Artist (clickable to edit), Settings Cog
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -135,26 +206,14 @@ fun FloatingLyricsCardView(
                     )
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Ghost Icon: Toggle Click-Through Ghost Mode
-                    IconButton(onClick = onToggleGhostMode, modifier = Modifier.size(30.dp)) {
-                        Icon(
-                            imageVector = GhostVector,
-                            contentDescription = if (settings.isClickThroughEnabled) "Ghost Mode Active" else "Enable Ghost Mode",
-                            tint = if (settings.isClickThroughEnabled) colorScheme.accentColor else colorScheme.activeLineColor.copy(alpha = 0.75f),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-
-                    // Settings Cog
-                    IconButton(onClick = onOpenSettings, modifier = Modifier.size(30.dp)) {
-                        Icon(
-                            imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings",
-                            tint = colorScheme.activeLineColor,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                // Settings Cog
+                IconButton(onClick = onOpenSettings, modifier = Modifier.size(30.dp)) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "Settings",
+                        tint = colorScheme.activeLineColor,
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
 
@@ -191,6 +250,8 @@ fun FloatingLyricsCardView(
                 val providerLabel = when (settings.preferredProviderId) {
                     "jiosaavn" -> "JioSaavn"
                     "lrclib" -> "LRCLIB"
+                    "ytmusic" -> "YT Music"
+                    "genius" -> "Genius"
                     "kugou" -> "KuGou"
                     "netease" -> "Netease"
                     "lyricsovh" -> "Lyrics.ovh"
@@ -201,11 +262,13 @@ fun FloatingLyricsCardView(
                     shape = RoundedCornerShape(8.dp),
                     color = colorScheme.surfaceColor,
                     modifier = Modifier.clickable {
-                        // Cycle through providers on click: auto -> jiosaavn -> lrclib -> kugou -> netease -> lyricsovh
+                        // Cycle through providers on click
                         val next = when (settings.preferredProviderId) {
                             "auto" -> "jiosaavn"
                             "jiosaavn" -> "lrclib"
-                            "lrclib" -> "kugou"
+                            "lrclib" -> "ytmusic"
+                            "ytmusic" -> "genius"
+                            "genius" -> "kugou"
                             "kugou" -> "netease"
                             "netease" -> "lyricsovh"
                             else -> "auto"
@@ -282,10 +345,12 @@ fun FloatingLyricsCardView(
                             val searchHint = when (settings.preferredProviderId) {
                                 "jiosaavn" -> "Checking JioSaavn Bollywood..."
                                 "lrclib" -> "Checking LRCLIB database..."
+                                "ytmusic" -> "Checking YouTube Music..."
+                                "genius" -> "Scraping Genius.com database..."
                                 "kugou" -> "Checking KuGou 50M+ database..."
                                 "netease" -> "Checking Netease database..."
                                 "lyricsovh" -> "Checking Lyrics.ovh database..."
-                                else -> "Checking LRCLIB, JioSaavn, KuGou & Netease..."
+                                else -> "Checking LRCLIB, JioSaavn, KuGou & Genius..."
                             }
                             Text(
                                 text = searchHint,
@@ -325,6 +390,49 @@ fun FloatingLyricsCardView(
                                 showRomanization = settings.isRomanizationEnabled,
                                 onClick = { onLineClicked(index) }
                             )
+                        }
+                    }
+
+                    // Floating chip indicator to jump back to currently playing line
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = !isCurrentLineVisible && syncState.activeLineIndex in syncState.lines.indices && !syncState.isLoading,
+                        enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.slideInVertically { it / 2 },
+                        exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.slideOutVertically { it / 2 },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(bottom = 8.dp, end = 8.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = colorScheme.accentColor,
+                            shadowElevation = 6.dp,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .clickable {
+                                    coroutineScope.launch {
+                                        val targetScroll = (syncState.activeLineIndex - 2).coerceAtLeast(0)
+                                        listState.animateScrollToItem(targetScroll)
+                                    }
+                                }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (isLineAbove) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                    contentDescription = "Jump to active line",
+                                    tint = Color.Black,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = "Current Line",
+                                    color = Color.Black,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }
@@ -395,8 +503,13 @@ fun FloatingLyricsCardView(
                         }
                         Text(
                             text = if (syncState.userOffsetMs != 0L) "${syncState.userOffsetMs / 1000.0}s" else "0s",
-                            color = colorScheme.inactiveLineColor,
-                            fontSize = 11.sp
+                            color = if (syncState.userOffsetMs != 0L) colorScheme.accentColor else colorScheme.inactiveLineColor,
+                            fontSize = 11.sp,
+                            fontWeight = if (syncState.userOffsetMs != 0L) FontWeight.Bold else FontWeight.Normal,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .clickable { onResetOffset() }
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
                         )
                         TextButton(
                             onClick = { onNudgeOffset(500L) },
@@ -567,6 +680,18 @@ private fun LyricsNotFoundFallbackView(
                 isSelected = preferredProviderId == "lrclib",
                 colorScheme = colorScheme,
                 onClick = { onSwitchProvider("lrclib") }
+            )
+            ProviderRetryOption(
+                label = "YouTube Music (Official Catalog)",
+                isSelected = preferredProviderId == "ytmusic",
+                colorScheme = colorScheme,
+                onClick = { onSwitchProvider("ytmusic") }
+            )
+            ProviderRetryOption(
+                label = "Genius (Deep Catalog / Web Scraper)",
+                isSelected = preferredProviderId == "genius",
+                colorScheme = colorScheme,
+                onClick = { onSwitchProvider("genius") }
             )
             ProviderRetryOption(
                 label = "KuGou (50M+ Synced Tracks)",
