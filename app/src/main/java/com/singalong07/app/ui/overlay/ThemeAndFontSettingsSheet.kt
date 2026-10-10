@@ -29,6 +29,7 @@ fun ThemeAndFontSettingsSheet(
     onToggleTranslation: (Boolean) -> Unit,
     onToggleRomanization: (Boolean) -> Unit,
     onToggleClickThrough: (Boolean) -> Unit,
+    onProviderSelect: (String) -> Unit = {},
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -60,11 +61,35 @@ fun ThemeAndFontSettingsSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // 1. Theme Presets
+            // 1. Preferred Provider Section
+            Text(text = "Preferred Lyric Provider", style = MaterialTheme.typography.labelMedium)
+            Spacer(modifier = Modifier.height(6.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                listOf(
+                    "auto" to "Auto",
+                    "jiosaavn" to "Bollywood",
+                    "lrclib" to "LRCLIB",
+                    "netease" to "Netease"
+                ).forEach { (id, label) ->
+                    val isSelected = settings.preferredProviderId == id
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { onProviderSelect(id) },
+                        label = { Text(label, fontSize = 11.sp) }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // 2. Theme Presets
             Text(text = "Theme Preset", style = MaterialTheme.typography.labelMedium)
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -99,11 +124,11 @@ fun ThemeAndFontSettingsSheet(
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // 2. Font Scale
+            // 3. Font Scale
             Text(text = "Lyrics Typography Scale", style = MaterialTheme.typography.labelMedium)
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -118,9 +143,9 @@ fun ThemeAndFontSettingsSheet(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // 3. Opacity Slider
+            // 4. Opacity Slider
             Text(
                 text = "Background Opacity: ${(settings.backgroundOpacity * 100).toInt()}%",
                 style = MaterialTheme.typography.labelMedium
@@ -132,9 +157,9 @@ fun ThemeAndFontSettingsSheet(
                 steps = 8
             )
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+            HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp))
 
-            // 4. Translation & Romanization
+            // 5. Translation & Romanization
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -149,11 +174,11 @@ fun ThemeAndFontSettingsSheet(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = "Romanized Pronunciation (Romaji/Pinyin)", style = MaterialTheme.typography.bodyMedium)
+                Text(text = "Romanized Pronunciation", style = MaterialTheme.typography.bodyMedium)
                 Switch(checked = settings.isRomanizationEnabled, onCheckedChange = onToggleRomanization)
             }
 
-            // 5. Click-Through Ghost Mode
+            // 6. Click-Through Ghost Mode
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -162,7 +187,7 @@ fun ThemeAndFontSettingsSheet(
                 Column {
                     Text(text = "Click-Through Ghost Mode", style = MaterialTheme.typography.bodyMedium)
                     Text(
-                        text = "Touch passes through to underlying games/apps",
+                        text = "Touch passes through to background apps",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

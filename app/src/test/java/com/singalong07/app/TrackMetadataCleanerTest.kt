@@ -41,4 +41,13 @@ class TrackMetadataCleanerTest {
         val score = TrackMetadataCleaner.tokenSortRatio(s1, s2)
         assertTrue("Tokens in different order should yield 1.0 similarity", score > 0.99)
     }
+
+    @Test
+    fun testBollywoodNoiseStripping() {
+        val raw = "Apna Bana Le (From \"Bhediya\") | T-Series"
+        val cleaned = TrackMetadataCleaner.clean(raw, "Arijit Singh")
+
+        assertEquals("Apna Bana Le", cleaned.title)
+        assertEquals("Arijit Singh", cleaned.artist)
+    }
 }

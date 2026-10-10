@@ -23,25 +23,51 @@ class MediaSessionControllerBridge(
     private val _currentArtist = MutableStateFlow<String?>(null)
     val currentArtist: StateFlow<String?> = _currentArtist.asStateFlow()
 
+    var onMetadataChangedCallback: ((MediaController) -> Unit)? = null
+
     private val callback = object : MediaController.Callback() {
         override fun onPlaybackStateChanged(state: PlaybackState?) {
             handlePlaybackStateChange(state)
         }
 
         override fun onMetadataChanged(metadata: MediaMetadata?) {
-            _currentTrackTitle.value = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
-            _currentArtist.value = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+            val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+                ?: metadata?.description?.title?.toString()
+            val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+                ?: metadata?.description?.subtitle?.toString()
+
+            if (!title.isNullOrBlank()) {
+                _currentTrackTitle.value = title
+                _currentArtist.value = artist
+            }
+
+            activeMediaController?.let { controller ->
+                onMetadataChangedCallback?.invoke(controller)
+            }
         }
     }
 
     fun attachMediaController(controller: MediaController) {
+        if (activeMediaController?.sessionToken == controller.sessionToken) {
+            // Already attached to this controller, just refresh state without tearing down listeners
+            handlePlaybackStateChange(controller.playbackState)
+            return
+        }
+
         detachMediaController()
         activeMediaController = controller
         controller.registerCallback(callback)
 
         val metadata = controller.metadata
-        _currentTrackTitle.value = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
-        _currentArtist.value = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+        val title = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
+            ?: metadata?.description?.title?.toString()
+        val artist = metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST)
+            ?: metadata?.description?.subtitle?.toString()
+
+        if (!title.isNullOrBlank()) {
+            _currentTrackTitle.value = title
+            _currentArtist.value = artist
+        }
 
         handlePlaybackStateChange(controller.playbackState)
     }

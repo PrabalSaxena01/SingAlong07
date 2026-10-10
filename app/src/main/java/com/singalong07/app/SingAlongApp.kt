@@ -23,6 +23,9 @@ class SingAlongApp : Application() {
     lateinit var lyricsRepository: LyricsAggregatorRepository
         private set
 
+    lateinit var controllerBridge: com.singalong07.app.service.media.MediaSessionControllerBridge
+        private set
+
     override fun onCreate() {
         super.onCreate()
         instance = this
@@ -31,6 +34,7 @@ class SingAlongApp : Application() {
         preferencesManager = OverlayPreferencesManager()
         syncEngine = BiDirectionalSyncEngine()
         lyricsRepository = LyricsAggregatorRepository()
+        controllerBridge = com.singalong07.app.service.media.MediaSessionControllerBridge(syncEngine)
 
         createNotificationChannels()
     }

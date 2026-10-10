@@ -44,7 +44,7 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
 
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         val app = SingAlongApp.instance
-        controllerBridge = MediaSessionControllerBridge(app.syncEngine, serviceScope)
+        controllerBridge = app.controllerBridge
 
         startForeground(NOTIFICATION_ID, createForegroundNotification())
         initOverlayWindow()
@@ -190,7 +190,6 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
         overlayComposeView?.let {
             windowManager?.removeView(it)
         }
-        controllerBridge?.detachMediaController()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

@@ -15,7 +15,8 @@ data class OverlaySettings(
     val targetLanguageCode: String = "en",
     val isRomanizationEnabled: Boolean = true,
     val isClickThroughEnabled: Boolean = false,
-    val autoMinimizeWhenIdle: Boolean = true
+    val autoMinimizeWhenIdle: Boolean = true,
+    val preferredProviderId: String = "auto"
 )
 
 class OverlayPreferencesManager {
@@ -49,5 +50,9 @@ class OverlayPreferencesManager {
 
     fun toggleClickThrough(enabled: Boolean) {
         _settingsFlow.update { it.copy(isClickThroughEnabled = enabled) }
+    }
+
+    fun updatePreferredProvider(providerId: String) {
+        _settingsFlow.update { it.copy(preferredProviderId = providerId) }
     }
 }

@@ -11,6 +11,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,6 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,18 +41,27 @@ fun FloatingLyricsCardView(
     trackTitle: String?,
     artistName: String?,
     onLineClicked: (Int) -> Unit,
+    onSeekToTimestamp: (Long) -> Unit,
     onTogglePlayPause: () -> Unit,
     onSkipNext: () -> Unit,
     onSkipPrevious: () -> Unit,
     onNudgeOffset: (Long) -> Unit,
+    onSwitchProvider: (String) -> Unit,
     onOpenSettings: () -> Unit,
     onMinimizeToPill: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val listState = rememberLazyListState()
+    var isUserScrubbing by remember { mutableStateOf(false) }
+    var scrubProgress by remember { mutableFloatStateOf(0f) }
+
+    // When track title changes, immediately reset scroll to top
+    LaunchedEffect(trackTitle) {
+        listState.scrollToItem(0)
+    }
 
     LaunchedEffect(syncState.activeLineIndex) {
-        if (syncState.activeLineIndex >= 0 && syncState.lines.isNotEmpty()) {
+        if (!isUserScrubbing && syncState.activeLineIndex >= 0 && syncState.lines.isNotEmpty()) {
             val targetScroll = (syncState.activeLineIndex - 2).coerceAtLeast(0)
             listState.animateScrollToItem(targetScroll)
         }
@@ -110,40 +122,137 @@ fun FloatingLyricsCardView(
                 }
             }
 
-            // Sync Tier Badge
-            val tierBadge = when (syncState.tier) {
-                SyncResolutionTier.TIER_1_WORD_BY_WORD -> "Karaoke Synced"
-                SyncResolutionTier.TIER_2_LINE_BY_LINE -> "LRC Synced"
-                SyncResolutionTier.TIER_3_HEURISTIC_PACING -> "Paced (Plain)"
-                SyncResolutionTier.TIER_4_FINGERPRINT_MATCH -> "Audio Match"
-                SyncResolutionTier.TIER_5_INSTRUMENTAL -> "Instrumental"
-            }
-            Text(
-                text = tierBadge,
-                color = colorScheme.accentColor,
-                fontSize = 10.sp,
-                modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 6.dp)
-            )
+            // Sync Tier & Provider Switcher Bar
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val tierBadge = when (syncState.tier) {
+                    SyncResolutionTier.TIER_1_WORD_BY_WORD -> "Karaoke Synced"
+                    SyncResolutionTier.TIER_2_LINE_BY_LINE -> "LRC Synced"
+                    SyncResolutionTier.TIER_3_HEURISTIC_PACING -> "Paced (Plain)"
+                    SyncResolutionTier.TIER_4_FINGERPRINT_MATCH -> "Audio Match"
+                    SyncResolutionTier.TIER_5_INSTRUMENTAL -> "Instrumental"
+                }
 
-            // Lyrics List
+                Text(
+                    text = tierBadge,
+                    color = colorScheme.accentColor,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Provider Switcher Chip
+                val providerLabel = when (settings.preferredProviderId) {
+                    "jiosaavn" -> "JioSaavn"
+                    "lrclib" -> "LRCLIB"
+                    "netease" -> "Netease"
+                    else -> "Auto Source"
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = colorScheme.surfaceColor,
+                    modifier = Modifier.clickable {
+                        // Cycle through providers on click: auto -> jiosaavn -> lrclib -> netease
+                        val next = when (settings.preferredProviderId) {
+                            "auto" -> "jiosaavn"
+                            "jiosaavn" -> "lrclib"
+                            "lrclib" -> "netease"
+                            else -> "auto"
+                        }
+                        onSwitchProvider(next)
+                    }
+                ) {
+                    Text(
+                        text = "$providerLabel ▾",
+                        color = colorScheme.activeLineColor,
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+
+            // Lyrics List with Tap-to-Seek
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(vertical = 36.dp)
+                contentPadding = PaddingValues(vertical = 24.dp)
             ) {
-                itemsIndexed(syncState.lines) { index, line ->
-                    val isActive = index == syncState.activeLineIndex
-                    InteractiveLyricLineItem(
-                        line = line,
-                        isActive = isActive,
-                        colorScheme = colorScheme,
-                        fontScale = settings.fontScale,
-                        showTranslation = settings.isTranslationEnabled,
-                        showRomanization = settings.isRomanizationEnabled,
-                        onClick = { onLineClicked(index) }
+                if (syncState.lines.isEmpty()) {
+                    item {
+                        Box(
+                            modifier = Modifier.fillMaxWidth().padding(top = 60.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (trackTitle != null) "Searching lyrics across sources..." else "Play music in Spotify, YouTube, or Apple Music!",
+                                color = colorScheme.inactiveLineColor,
+                                fontSize = 12.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                } else {
+                    itemsIndexed(syncState.lines) { index, line ->
+                        val isActive = index == syncState.activeLineIndex
+                        InteractiveLyricLineItem(
+                            line = line,
+                            isActive = isActive,
+                            colorScheme = colorScheme,
+                            fontScale = settings.fontScale,
+                            showTranslation = settings.isTranslationEnabled,
+                            showRomanization = settings.isRomanizationEnabled,
+                            onClick = { onLineClicked(index) } // Tapping line jumps music player!
+                        )
+                    }
+                }
+            }
+
+            // Interactive Seek Bar / Timeline Scrubber
+            if (syncState.durationMs > 0) {
+                val currentPos = if (isUserScrubbing) (scrubProgress * syncState.durationMs).toLong() else syncState.currentPositionMs
+                val progress = if (syncState.durationMs > 0) (currentPos.toFloat() / syncState.durationMs).coerceIn(0f, 1f) else 0f
+
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = formatTime(currentPos),
+                        color = colorScheme.inactiveLineColor,
+                        fontSize = 10.sp
+                    )
+
+                    Slider(
+                        value = if (isUserScrubbing) scrubProgress else progress,
+                        onValueChange = {
+                            isUserScrubbing = true
+                            scrubProgress = it
+                        },
+                        onValueChangeFinished = {
+                            val targetMs = (scrubProgress * syncState.durationMs).toLong()
+                            onSeekToTimestamp(targetMs)
+                            isUserScrubbing = false
+                        },
+                        colors = SliderDefaults.colors(
+                            thumbColor = colorScheme.accentColor,
+                            activeTrackColor = colorScheme.accentColor,
+                            inactiveTrackColor = colorScheme.surfaceColor
+                        ),
+                        modifier = Modifier.weight(1f).padding(horizontal = 4.dp).height(24.dp)
+                    )
+
+                    Text(
+                        text = formatTime(syncState.durationMs),
+                        color = colorScheme.inactiveLineColor,
+                        fontSize = 10.sp
                     )
                 }
             }
@@ -185,7 +294,7 @@ fun FloatingLyricsCardView(
                     // Transport Buttons
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(onClick = onSkipPrevious, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Prev", tint = colorScheme.activeLineColor)
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Prev", tint = colorScheme.activeLineColor)
                         }
                         IconButton(onClick = onTogglePlayPause, modifier = Modifier.size(36.dp)) {
                             Icon(
@@ -195,7 +304,7 @@ fun FloatingLyricsCardView(
                             )
                         }
                         IconButton(onClick = onSkipNext, modifier = Modifier.size(36.dp)) {
-                            Icon(Icons.Default.ArrowForward, contentDescription = "Next", tint = colorScheme.activeLineColor)
+                            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Next", tint = colorScheme.activeLineColor)
                         }
                     }
                 }
@@ -230,7 +339,7 @@ private fun InteractiveLyricLineItem(
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
-                onClick = onClick
+                onClick = onClick // Tapping line scrubs media player to this line!
             )
             .padding(vertical = 4.dp, horizontal = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -254,4 +363,11 @@ private fun InteractiveLyricLineItem(
             )
         }
     }
+}
+
+private fun formatTime(ms: Long): String {
+    val totalSeconds = (ms / 1000).coerceAtLeast(0)
+    val minutes = totalSeconds / 60
+    val seconds = totalSeconds % 60
+    return String.format("%02d:%02d", minutes, seconds)
 }

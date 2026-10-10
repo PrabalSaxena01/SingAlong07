@@ -9,26 +9,37 @@ import java.util.concurrent.ConcurrentHashMap
 class LyricsAggregatorRepository(
     private val sources: List<LyricsSource> = listOf(
         LrclibSource(),
+        JioSaavnSource(),
         NeteaseSource()
     )
 ) {
     private val memoryCache = ConcurrentHashMap<String, LyricsResult>()
 
+    fun getAllSources(): List<LyricsSource> = sources
+
     suspend fun getLyricsCascading(
         title: String,
         artist: String,
         album: String? = null,
-        durationSeconds: Long? = null
+        durationSeconds: Long? = null,
+        preferredSourceId: String? = null
     ): Result<LyricsResult> = withContext(Dispatchers.IO) {
-        val cacheKey = makeCacheKey(artist, title)
+        val cacheKey = makeCacheKey(artist, title, preferredSourceId)
         val cached = memoryCache[cacheKey]
         if (cached != null) {
             return@withContext Result.success(cached)
         }
 
+        // If user has a preferred source, prioritize it first
+        val sortedSources = if (!preferredSourceId.isNullOrBlank() && preferredSourceId != "auto") {
+            sources.sortedByDescending { it.id == preferredSourceId }
+        } else {
+            sources
+        }
+
         var plainFallbackResult: LyricsResult? = null
 
-        for (source in sources) {
+        for (source in sortedSources) {
             val result = source.fetchLyrics(title, artist, album, durationSeconds)
             if (result.isSuccess) {
                 val lyricsResult = result.getOrThrow()
@@ -52,6 +63,25 @@ class LyricsAggregatorRepository(
         Result.failure(NoSuchElementException("No lyrics found across ${sources.size} providers for $artist - $title"))
     }
 
+    suspend fun fetchFromSpecificSource(
+        sourceId: String,
+        title: String,
+        artist: String,
+        album: String? = null,
+        durationSeconds: Long? = null
+    ): Result<LyricsResult> = withContext(Dispatchers.IO) {
+        val targetSource = sources.firstOrNull { it.id == sourceId }
+            ?: return@withContext Result.failure(IllegalArgumentException("Unknown source id: $sourceId"))
+
+        val result = targetSource.fetchLyrics(title, artist, album, durationSeconds)
+        if (result.isSuccess) {
+            val res = result.getOrThrow()
+            val cacheKey = makeCacheKey(artist, title, sourceId)
+            memoryCache[cacheKey] = res
+        }
+        result
+    }
+
     suspend fun queryAllSourcesConcurrently(
         title: String,
         artist: String,
@@ -66,7 +96,8 @@ class LyricsAggregatorRepository(
         }.awaitAll()
     }
 
-    private fun makeCacheKey(artist: String, title: String): String {
-        return "${artist.trim().lowercase()}__${title.trim().lowercase()}"
+    private fun makeCacheKey(artist: String, title: String, sourceId: String? = null): String {
+        val base = "${artist.trim().lowercase()}__${title.trim().lowercase()}"
+        return if (sourceId != null && sourceId != "auto") "${base}__${sourceId}" else base
     }
 }
