@@ -190,7 +190,10 @@ fun MainScreen(
                     onToggleTranslation = { app.preferencesManager.toggleTranslation(it) },
                     onToggleRomanization = { app.preferencesManager.toggleRomanization(it) },
                     onToggleClickThrough = { app.preferencesManager.toggleClickThrough(it) },
-                    onUpdateProvider = { app.preferencesManager.updatePreferredProvider(it) }
+                    onUpdateProvider = {
+                        app.preferencesManager.updatePreferredProvider(it)
+                        app.reloadCurrentLyrics(it)
+                    }
                 )
             }
         }

@@ -9,7 +9,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -47,6 +50,7 @@ fun FloatingLyricsCardView(
     onSkipPrevious: () -> Unit,
     onNudgeOffset: (Long) -> Unit,
     onSwitchProvider: (String) -> Unit,
+    onRetryLyrics: () -> Unit = {},
     onOpenSettings: () -> Unit,
     onMinimizeToPill: () -> Unit,
     modifier: Modifier = Modifier
@@ -133,11 +137,17 @@ fun FloatingLyricsCardView(
                     SyncResolutionTier.TIER_2_LINE_BY_LINE -> "LRC Synced"
                     SyncResolutionTier.TIER_3_HEURISTIC_PACING -> "Paced (Plain)"
                     SyncResolutionTier.TIER_4_FINGERPRINT_MATCH -> "Audio Match"
-                    SyncResolutionTier.TIER_5_INSTRUMENTAL -> "Instrumental"
+                    SyncResolutionTier.TIER_5_INSTRUMENTAL -> if (syncState.lyricsNotFound) "No Lyrics" else "Instrumental"
+                }
+
+                val fullBadge = if (!syncState.sourceName.isNullOrBlank()) {
+                    "$tierBadge • ${syncState.sourceName}"
+                } else {
+                    tierBadge
                 }
 
                 Text(
-                    text = tierBadge,
+                    text = fullBadge,
                     color = colorScheme.accentColor,
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold
@@ -176,41 +186,107 @@ fun FloatingLyricsCardView(
                 }
             }
 
-            // Lyrics List with Tap-to-Seek
-            LazyColumn(
-                state = listState,
+            // Middle Content: Loading, Lyrics Not Found Fallback, or Active Lyrics
+            Box(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(vertical = 24.dp)
+                    .fillMaxWidth()
             ) {
-                if (syncState.lines.isEmpty()) {
-                    item {
-                        Box(
-                            modifier = Modifier.fillMaxWidth().padding(top = 60.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
+                if (trackTitle == null) {
+                    // No media detected
+                    Box(
+                        modifier = Modifier.fillMaxSize().padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(
+                                imageVector = Icons.Default.MusicNote,
+                                contentDescription = null,
+                                tint = colorScheme.inactiveLineColor,
+                                modifier = Modifier.size(34.dp)
+                            )
+                            Spacer(modifier = Modifier.height(10.dp))
                             Text(
-                                text = if (trackTitle != null) "Searching lyrics across sources..." else "Play music in Spotify, YouTube, or Apple Music!",
+                                text = "Play music in any app!",
+                                color = colorScheme.activeLineColor,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Spotify, YouTube, JioSaavn, Apple Music...",
                                 color = colorScheme.inactiveLineColor,
-                                fontSize = 12.sp,
+                                fontSize = 11.sp,
                                 textAlign = TextAlign.Center
                             )
                         }
                     }
+                } else if (syncState.isLoading) {
+                    // Actively loading lyrics
+                    Box(
+                        modifier = Modifier.fillMaxSize().padding(16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(
+                                color = colorScheme.accentColor,
+                                modifier = Modifier.size(30.dp),
+                                strokeWidth = 2.5.dp
+                            )
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Text(
+                                text = "Searching lyrics...",
+                                color = colorScheme.activeLineColor,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            val searchHint = when (settings.preferredProviderId) {
+                                "jiosaavn" -> "Checking JioSaavn Bollywood..."
+                                "lrclib" -> "Checking LRCLIB database..."
+                                "netease" -> "Checking Netease database..."
+                                else -> "Checking LRCLIB, JioSaavn & Netease..."
+                            }
+                            Text(
+                                text = searchHint,
+                                color = colorScheme.inactiveLineColor,
+                                fontSize = 11.sp,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                } else if (syncState.lines.isEmpty()) {
+                    // Prominent Fallback: Lyrics Not Found UI
+                    LyricsNotFoundFallbackView(
+                        trackTitle = trackTitle,
+                        artistName = artistName,
+                        preferredProviderId = settings.preferredProviderId,
+                        colorScheme = colorScheme,
+                        onSwitchProvider = onSwitchProvider,
+                        onRetry = onRetryLyrics
+                    )
                 } else {
-                    itemsIndexed(syncState.lines) { index, line ->
-                        val isActive = index == syncState.activeLineIndex
-                        InteractiveLyricLineItem(
-                            line = line,
-                            isActive = isActive,
-                            colorScheme = colorScheme,
-                            fontScale = settings.fontScale,
-                            showTranslation = settings.isTranslationEnabled,
-                            showRomanization = settings.isRomanizationEnabled,
-                            onClick = { onLineClicked(index) } // Tapping line jumps music player!
-                        )
+                    // Synced lines LazyColumn
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        contentPadding = PaddingValues(vertical = 24.dp)
+                    ) {
+                        itemsIndexed(syncState.lines) { index, line ->
+                            val isActive = index == syncState.activeLineIndex
+                            InteractiveLyricLineItem(
+                                line = line,
+                                isActive = isActive,
+                                colorScheme = colorScheme,
+                                fontScale = settings.fontScale,
+                                showTranslation = settings.isTranslationEnabled,
+                                showRomanization = settings.isRomanizationEnabled,
+                                onClick = { onLineClicked(index) }
+                            )
+                        }
                     }
                 }
             }
@@ -370,4 +446,145 @@ private fun formatTime(ms: Long): String {
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return String.format("%02d:%02d", minutes, seconds)
+}
+
+@Composable
+private fun LyricsNotFoundFallbackView(
+    trackTitle: String,
+    artistName: String?,
+    preferredProviderId: String,
+    colorScheme: OverlayColorScheme,
+    onSwitchProvider: (String) -> Unit,
+    onRetry: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = colorScheme.surfaceColor,
+            modifier = Modifier.size(38.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Default.SearchOff,
+                    contentDescription = "Not Found",
+                    tint = colorScheme.accentColor,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Lyrics Not Found",
+            color = colorScheme.activeLineColor,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(2.dp))
+
+        Text(
+            text = "Checked sources for \"$trackTitle\"",
+            color = colorScheme.inactiveLineColor,
+            fontSize = 10.sp,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Text(
+            text = "Switch provider to retry:",
+            color = colorScheme.activeLineColor.copy(alpha = 0.8f),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            ProviderRetryOption(
+                label = "JioSaavn (Bollywood / Hindi)",
+                isSelected = preferredProviderId == "jiosaavn",
+                colorScheme = colorScheme,
+                onClick = { onSwitchProvider("jiosaavn") }
+            )
+            ProviderRetryOption(
+                label = "LRCLIB (Global LRC Database)",
+                isSelected = preferredProviderId == "lrclib",
+                colorScheme = colorScheme,
+                onClick = { onSwitchProvider("lrclib") }
+            )
+            ProviderRetryOption(
+                label = "Netease (Anime / Asian / C-Pop)",
+                isSelected = preferredProviderId == "netease",
+                colorScheme = colorScheme,
+                onClick = { onSwitchProvider("netease") }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        OutlinedButton(
+            onClick = onRetry,
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = colorScheme.accentColor),
+            shape = RoundedCornerShape(8.dp),
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 2.dp),
+            modifier = Modifier.height(30.dp)
+        ) {
+            Icon(imageVector = Icons.Default.Refresh, contentDescription = "Retry", modifier = Modifier.size(13.dp))
+            Spacer(modifier = Modifier.width(4.dp))
+            Text(text = "Retry Search", fontSize = 11.sp)
+        }
+    }
+}
+
+@Composable
+private fun ProviderRetryOption(
+    label: String,
+    isSelected: Boolean,
+    colorScheme: OverlayColorScheme,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(32.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(8.dp),
+        color = if (isSelected) colorScheme.accentColor.copy(alpha = 0.2f) else colorScheme.surfaceColor,
+        border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, colorScheme.accentColor) else null
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                color = colorScheme.activeLineColor,
+                fontSize = 11.sp,
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+            )
+            Icon(
+                imageVector = Icons.Default.PlayArrow,
+                contentDescription = null,
+                tint = colorScheme.accentColor,
+                modifier = Modifier.size(12.dp)
+            )
+        }
+    }
 }

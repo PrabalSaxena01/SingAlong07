@@ -74,7 +74,11 @@ fun FloatingOverlayRoot(
                         onSkipNext = { controllerBridge.skipToNext() },
                         onSkipPrevious = { controllerBridge.skipToPrevious() },
                         onNudgeOffset = { delta -> app.syncEngine.adjustOffset(delta) },
-                        onSwitchProvider = { providerId -> app.preferencesManager.updatePreferredProvider(providerId) },
+                        onSwitchProvider = { providerId ->
+                            app.preferencesManager.updatePreferredProvider(providerId)
+                            app.reloadCurrentLyrics(providerId)
+                        },
+                        onRetryLyrics = { app.reloadCurrentLyrics() },
                         onOpenSettings = { showSettings = true },
                         onMinimizeToPill = { isExpanded = false }
                     )
@@ -88,7 +92,10 @@ fun FloatingOverlayRoot(
                             onToggleTranslation = { app.preferencesManager.toggleTranslation(it) },
                             onToggleRomanization = { app.preferencesManager.toggleRomanization(it) },
                             onToggleClickThrough = { app.preferencesManager.toggleClickThrough(it) },
-                            onProviderSelect = { app.preferencesManager.updatePreferredProvider(it) },
+                            onProviderSelect = { providerId ->
+                                app.preferencesManager.updatePreferredProvider(providerId)
+                                app.reloadCurrentLyrics(providerId)
+                            },
                             onDismiss = { showSettings = false },
                             modifier = Modifier.fillMaxSize()
                         )

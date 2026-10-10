@@ -21,7 +21,10 @@ data class SyncPlaybackState(
     val isPlaying: Boolean = false,
     val tier: SyncResolutionTier = SyncResolutionTier.TIER_2_LINE_BY_LINE,
     val userOffsetMs: Long = 0L,
-    val lines: List<DualLanguageLyricLine> = emptyList()
+    val lines: List<DualLanguageLyricLine> = emptyList(),
+    val isLoading: Boolean = false,
+    val lyricsNotFound: Boolean = false,
+    val sourceName: String? = null
 )
 
 class BiDirectionalSyncEngine {
@@ -33,7 +36,43 @@ class BiDirectionalSyncEngine {
     private var totalDurationMs: Long = 0L
     private var currentUserOffsetMs: Long = 0L
 
-    fun loadSyncedLyrics(lines: List<DualLanguageLyricLine>, durationMs: Long, isWordByWord: Boolean = false) {
+    fun startLoadingLyrics(durationMs: Long = 0L) {
+        this.activeLines = emptyList()
+        this.totalDurationMs = durationMs
+        _syncState.update {
+            it.copy(
+                lines = emptyList(),
+                durationMs = durationMs,
+                isLoading = true,
+                lyricsNotFound = false,
+                sourceName = null,
+                activeLineIndex = -1
+            )
+        }
+    }
+
+    fun setLyricsNotFound(durationMs: Long = 0L) {
+        this.activeLines = emptyList()
+        this.totalDurationMs = durationMs
+        _syncState.update {
+            it.copy(
+                lines = emptyList(),
+                durationMs = durationMs,
+                isLoading = false,
+                lyricsNotFound = true,
+                sourceName = null,
+                tier = SyncResolutionTier.TIER_5_INSTRUMENTAL,
+                activeLineIndex = -1
+            )
+        }
+    }
+
+    fun loadSyncedLyrics(
+        lines: List<DualLanguageLyricLine>,
+        durationMs: Long,
+        isWordByWord: Boolean = false,
+        sourceName: String? = null
+    ) {
         this.activeLines = lines
         this.totalDurationMs = durationMs
         val tier = if (isWordByWord) SyncResolutionTier.TIER_1_WORD_BY_WORD else SyncResolutionTier.TIER_2_LINE_BY_LINE
@@ -43,6 +82,9 @@ class BiDirectionalSyncEngine {
                 lines = lines,
                 durationMs = durationMs,
                 tier = tier,
+                isLoading = false,
+                lyricsNotFound = lines.isEmpty(),
+                sourceName = sourceName,
                 activeLineIndex = -1
             )
         }
@@ -52,7 +94,11 @@ class BiDirectionalSyncEngine {
      * Intensive Fallback: Generates synthetic line timings based on word counts
      * and track duration when only un-synced plain lyrics are available.
      */
-    fun loadPlainLyricsWithPacingFallback(plainText: String, durationMs: Long) {
+    fun loadPlainLyricsWithPacingFallback(
+        plainText: String,
+        durationMs: Long,
+        sourceName: String? = null
+    ) {
         this.totalDurationMs = durationMs
         val rawLines = plainText.lines().map { it.trim() }.filter { it.isNotBlank() }
 
@@ -60,7 +106,10 @@ class BiDirectionalSyncEngine {
             _syncState.update {
                 it.copy(
                     lines = emptyList(),
-                    tier = SyncResolutionTier.TIER_5_INSTRUMENTAL
+                    tier = SyncResolutionTier.TIER_5_INSTRUMENTAL,
+                    isLoading = false,
+                    lyricsNotFound = true,
+                    sourceName = null
                 )
             }
             return
@@ -93,6 +142,9 @@ class BiDirectionalSyncEngine {
                 lines = estimatedLines,
                 durationMs = durationMs,
                 tier = SyncResolutionTier.TIER_3_HEURISTIC_PACING,
+                isLoading = false,
+                lyricsNotFound = false,
+                sourceName = sourceName,
                 activeLineIndex = -1
             )
         }

@@ -8,6 +8,10 @@ import com.singalong07.app.data.db.SingAlongDatabase
 import com.singalong07.app.data.preferences.OverlayPreferencesManager
 import com.singalong07.app.data.sources.LyricsAggregatorRepository
 import com.singalong07.app.domain.sync.BiDirectionalSyncEngine
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class SingAlongApp : Application() {
 
@@ -37,6 +41,54 @@ class SingAlongApp : Application() {
         controllerBridge = com.singalong07.app.service.media.MediaSessionControllerBridge(syncEngine)
 
         createNotificationChannels()
+    }
+
+    private val appScope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main + kotlinx.coroutines.SupervisorJob())
+
+    fun reloadCurrentLyrics(preferredSourceId: String? = null) {
+        val trackingService = com.singalong07.app.service.media.MusicTrackingNotificationService.instance
+        if (trackingService != null && trackingService.hasActiveTrack()) {
+            trackingService.reloadCurrentTrack(preferredSourceId)
+            return
+        }
+
+        // Fallback: Query based on current metadata in controllerBridge
+        val rawTitle = controllerBridge.currentTrackTitle.value ?: return
+        val rawArtist = controllerBridge.currentArtist.value
+        val durationMs = syncEngine.syncState.value.durationMs
+
+        appScope.launch {
+            syncEngine.startLoadingLyrics(durationMs)
+            val cleaned = com.singalong07.app.domain.cleaner.TrackMetadataCleaner.clean(rawTitle, rawArtist)
+            val provider = preferredSourceId ?: preferencesManager.settingsFlow.value.preferredProviderId
+
+            val result = lyricsRepository.getLyricsCascading(
+                title = cleaned.title,
+                artist = cleaned.artist,
+                durationSeconds = if (durationMs > 0) durationMs / 1000 else null,
+                preferredSourceId = provider
+            )
+
+            if (result.isSuccess) {
+                val lyrics = result.getOrThrow()
+                if (!lyrics.syncedLrc.isNullOrBlank()) {
+                    val parsed = com.singalong07.app.domain.parser.LrcParser.parse(lyrics.syncedLrc)
+                    syncEngine.loadSyncedLyrics(
+                        lines = parsed.lines,
+                        durationMs = durationMs,
+                        isWordByWord = parsed.isWordByWord,
+                        sourceName = lyrics.sourceName
+                    )
+                } else if (!lyrics.plainLyrics.isNullOrBlank()) {
+                    val safeDuration = if (durationMs > 0) durationMs else 180000L
+                    syncEngine.loadPlainLyricsWithPacingFallback(lyrics.plainLyrics, safeDuration, lyrics.sourceName)
+                } else {
+                    syncEngine.setLyricsNotFound(durationMs)
+                }
+            } else {
+                syncEngine.setLyricsNotFound(durationMs)
+            }
+        }
     }
 
     private fun createNotificationChannels() {

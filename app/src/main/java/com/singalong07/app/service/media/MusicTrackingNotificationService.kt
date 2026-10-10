@@ -29,8 +29,19 @@ class MusicTrackingNotificationService : NotificationListenerService() {
         handleActiveControllers(controllers)
     }
 
+    private var currentTrack: ActiveTrack? = null
+
+    data class ActiveTrack(
+        val rawTitle: String,
+        val rawArtist: String?,
+        val album: String?,
+        val durationMs: Long,
+        val sourcePackage: String
+    )
+
     override fun onCreate() {
         super.onCreate()
+        instance = this
         val app = SingAlongApp.instance
         controllerBridge = app.controllerBridge
 
@@ -150,19 +161,28 @@ class MusicTrackingNotificationService : NotificationListenerService() {
         rawArtist: String?,
         album: String?,
         durationMs: Long,
-        sourcePackage: String
+        sourcePackage: String,
+        preferredSourceOverride: String? = null
     ) {
         val cleaned = TrackMetadataCleaner.clean(rawTitle, rawArtist)
-        val trackHash = "${cleaned.artist.lowercase()}__${cleaned.title.lowercase()}"
+        val trackHash = "${cleaned.artist.lowercase()}__${cleaned.title.lowercase()}__${preferredSourceOverride ?: ""}"
 
         if (trackHash == lastTrackHash && lastTrackHash.isNotBlank()) return
         lastTrackHash = trackHash
 
-        // CRITICAL BUG FIX: Cancel any in-flight lyrics fetch so old queries don't overwrite the new track!
+        // Cache currently active track details for manual retries / provider re-queries
+        currentTrack = ActiveTrack(rawTitle, rawArtist, album, durationMs, sourcePackage)
+
+        // CRITICAL BUG FIX: Immediately clear previous song lyrics and enter loading state!
+        // This ensures old lyrics never linger for 1 second when changing songs.
+        val app = SingAlongApp.instance
+        app.syncEngine.startLoadingLyrics(durationMs)
+
+        // Cancel any in-flight lyrics fetch so old slow queries don't overwrite the new track
         lyricsFetchJob?.cancel()
         lyricsFetchJob = serviceScope.launch {
-            val app = SingAlongApp.instance
-            val preferredSource = app.preferencesManager.settingsFlow.value.preferredProviderId
+            val preferredSource = preferredSourceOverride
+                ?: app.preferencesManager.settingsFlow.value.preferredProviderId
 
             // 1. Restore saved user timing calibration offset from Room DB
             val savedOffset = app.database.historyDao().getOffsetForTrack(trackHash) ?: 0L
@@ -192,18 +212,21 @@ class MusicTrackingNotificationService : NotificationListenerService() {
                     app.syncEngine.loadSyncedLyrics(
                         lines = parsed.lines,
                         durationMs = durationMs,
-                        isWordByWord = parsed.isWordByWord
+                        isWordByWord = parsed.isWordByWord,
+                        sourceName = lyricSource
                     )
                     syncType = if (parsed.isWordByWord) "WORD_BY_WORD" else "SYNCED_LRC"
                 } else if (!lyrics.plainLyrics.isNullOrBlank()) {
                     val safeDuration = if (durationMs > 0) durationMs else 180000L
-                    app.syncEngine.loadPlainLyricsWithPacingFallback(lyrics.plainLyrics, safeDuration)
+                    app.syncEngine.loadPlainLyricsWithPacingFallback(lyrics.plainLyrics, safeDuration, lyricSource)
                     syncType = "PACED_PLAIN"
+                } else {
+                    app.syncEngine.setLyricsNotFound(durationMs)
                 }
             } else {
-                // Only clear if this is still the active track
+                // Not found fallback
                 if (trackHash == lastTrackHash) {
-                    app.syncEngine.loadSyncedLyrics(emptyList(), durationMs)
+                    app.syncEngine.setLyricsNotFound(durationMs)
                 }
             }
 
@@ -223,9 +246,32 @@ class MusicTrackingNotificationService : NotificationListenerService() {
         }
     }
 
+    fun hasActiveTrack(): Boolean = currentTrack != null
+
+    fun reloadCurrentTrack(preferredSourceOverride: String? = null) {
+        val track = currentTrack ?: return
+        lastTrackHash = "" // Clear last hash to avoid debounce skip
+        fetchAndSynchronizeLyrics(
+            rawTitle = track.rawTitle,
+            rawArtist = track.rawArtist,
+            album = track.album,
+            durationMs = track.durationMs,
+            sourcePackage = track.sourcePackage,
+            preferredSourceOverride = preferredSourceOverride
+        )
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         lyricsFetchJob?.cancel()
         serviceScope.cancel()
+        if (instance == this) {
+            instance = null
+        }
+    }
+
+    companion object {
+        var instance: MusicTrackingNotificationService? = null
+            private set
     }
 }
