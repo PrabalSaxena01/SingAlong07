@@ -17,7 +17,14 @@ class LyricsAggregatorRepository(
         LyricsOvhSource()
     )
 ) {
-    private val memoryCache = ConcurrentHashMap<String, LyricsResult>()
+    // Bounded LRU cache (capped at 250 items) to prevent unbounded memory growth / OOM
+    private val memoryCache: MutableMap<String, LyricsResult> = java.util.Collections.synchronizedMap(
+        object : java.util.LinkedHashMap<String, LyricsResult>(64, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, LyricsResult>?): Boolean {
+                return size > 250
+            }
+        }
+    )
 
     fun getAllSources(): List<LyricsSource> = sources
 

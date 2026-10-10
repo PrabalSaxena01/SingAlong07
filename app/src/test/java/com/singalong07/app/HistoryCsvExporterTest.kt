@@ -20,6 +20,10 @@ class HistoryCsvExporterTest {
 
         // String with quote
         assertEquals("\"Song \"\"Special\"\"\"", exporter.escapeCsvField("Song \"Special\""))
+
+        // String with formula injection triggers
+        assertEquals("'=cmd|' /C calc'!A0", exporter.escapeCsvField("=cmd|' /C calc'!A0"))
+        assertEquals("'+12345", exporter.escapeCsvField("+12345"))
     }
 
     @Test

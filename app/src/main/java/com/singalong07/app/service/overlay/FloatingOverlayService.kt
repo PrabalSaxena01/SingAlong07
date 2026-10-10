@@ -285,7 +285,7 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
 
                 Surface(
                     shape = CircleShape,
-                    color = Color(0x330F172A), // Light translucent background, no blue ring!
+                    color = if (isGhost) Color(0x660891B2) else Color(0x330F172A), // Soft ethereal teal glass tint when ghost mode is active
                     shadowElevation = 0.dp,
                     modifier = Modifier
                         .size(36.dp)

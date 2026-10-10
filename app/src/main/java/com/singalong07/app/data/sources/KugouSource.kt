@@ -19,8 +19,8 @@ class KugouSource : LyricsSource {
     override val supportsTranslations: Boolean = false
     override val requiresApiKey: Boolean = false
 
-    private val searchUrl = "http://lyrics.kugou.com/search"
-    private val downloadUrl = "http://lyrics.kugou.com/download"
+    private val searchUrl = "https://lyrics.kugou.com/search"
+    private val downloadUrl = "https://lyrics.kugou.com/download"
 
     override suspend fun fetchLyrics(
         title: String,

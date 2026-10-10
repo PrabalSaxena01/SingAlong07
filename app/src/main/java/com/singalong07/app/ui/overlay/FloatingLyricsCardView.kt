@@ -2,7 +2,9 @@ package com.singalong07.app.ui.overlay
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -99,11 +101,23 @@ fun FloatingLyricsCardView(
         }
     }
 
+    val isGhost = settings.isClickThroughEnabled
+    val cardBackgroundColor = if (isGhost) {
+        // Slight distinct ethereal color when ghost mode is active
+        colorScheme.backgroundColor.copy(alpha = (settings.backgroundOpacity * 0.70f).coerceAtLeast(0.20f))
+    } else {
+        colorScheme.backgroundColor.copy(alpha = settings.backgroundOpacity)
+    }
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(22.dp))
-            .background(colorScheme.backgroundColor.copy(alpha = settings.backgroundOpacity))
+            .then(
+                if (isGhost) Modifier.border(BorderStroke(1.dp, colorScheme.accentColor.copy(alpha = 0.30f)), RoundedCornerShape(22.dp))
+                else Modifier
+            )
+            .background(cardBackgroundColor)
     ) {
         Column(
             modifier = Modifier

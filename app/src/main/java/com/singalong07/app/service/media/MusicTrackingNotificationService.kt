@@ -105,8 +105,14 @@ class MusicTrackingNotificationService : NotificationListenerService() {
             }
         } catch (_: Exception) {}
 
-        // 3. Fallback for non-session media: Extract Title and Artist directly from notification extras
-        if (sbn.isOngoing || sbn.notification.category == Notification.CATEGORY_TRANSPORT) {
+        // 3. Fallback for non-session media: Extract Title and Artist ONLY if verified as a media notification
+        val isMediaCategory = sbn.notification.category == Notification.CATEGORY_TRANSPORT
+        val hasMediaAction = sbn.notification.actions?.any { action ->
+            action.title?.toString()?.matches(Regex("(?i)play|pause|next|prev|previous|skip")) == true
+        } == true
+        val isMediaNotification = isMediaCategory || hasMediaAction || extras.containsKey(Notification.EXTRA_MEDIA_SESSION)
+
+        if (isMediaNotification && (sbn.isOngoing || isMediaCategory)) {
             val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()
             val artist = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()
             if (!title.isNullOrBlank() && title != "SingAlong07") {
@@ -119,7 +125,9 @@ class MusicTrackingNotificationService : NotificationListenerService() {
         try {
             val activeNotifications = activeNotifications ?: return
             for (sbn in activeNotifications) {
-                if (sbn.packageName != packageName && (sbn.isOngoing || sbn.notification.category == Notification.CATEGORY_TRANSPORT)) {
+                if (sbn.packageName != packageName && 
+                    (sbn.notification.category == Notification.CATEGORY_TRANSPORT || sbn.notification.extras.containsKey(Notification.EXTRA_MEDIA_SESSION))
+                ) {
                     onNotificationPosted(sbn)
                     break
                 }

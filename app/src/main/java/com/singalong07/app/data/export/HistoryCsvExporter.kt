@@ -61,13 +61,22 @@ class HistoryCsvExporter(private val context: Context? = null) {
     }
 
     /**
-     * RFC-4180 CSV escaping for quotes, commas, and line breaks.
+     * RFC-4180 CSV escaping for quotes, commas, and line breaks,
+     * with OWASP CSV Injection (Formula Injection) mitigation.
      */
     fun escapeCsvField(field: String): String {
-        return if (field.contains(",") || field.contains("\"") || field.contains("\n") || field.contains("\r")) {
-            "\"" + field.replace("\"", "\"\"") + "\""
+        var sanitized = field
+        // OWASP mitigation: Prevent Excel/Calc DDE formula execution
+        if (sanitized.startsWith("=") || sanitized.startsWith("+") || sanitized.startsWith("-") || 
+            sanitized.startsWith("@") || sanitized.startsWith("\t") || sanitized.startsWith("\r")
+        ) {
+            sanitized = "'$sanitized"
+        }
+
+        return if (sanitized.contains(",") || sanitized.contains("\"") || sanitized.contains("\n") || sanitized.contains("\r")) {
+            "\"" + sanitized.replace("\"", "\"\"") + "\""
         } else {
-            field
+            sanitized
         }
     }
 }
