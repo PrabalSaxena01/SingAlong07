@@ -189,6 +189,8 @@ class FloatingOverlayService : Service(), LifecycleOwner, ViewModelStoreOwner, S
             val newX = (params.x + deltaX).toInt().coerceIn(-100, screenWidth - 50)
             val newY = (params.y + deltaY).toInt().coerceIn(10, screenHeight - 20)
 
+            if (newX == params.x && newY == params.y) return@let
+
             params.x = newX
             params.y = newY
 

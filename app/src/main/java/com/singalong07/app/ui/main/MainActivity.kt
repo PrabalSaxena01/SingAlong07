@@ -286,7 +286,8 @@ fun PlayerAndOverlayTab(
     val app = SingAlongApp.instance
     val currentTitle by app.controllerBridge.currentTrackTitle.collectAsState()
     val currentArtist by app.controllerBridge.currentArtist.collectAsState()
-    val syncState by app.syncEngine.syncState.collectAsState()
+    val isPlaying by app.syncEngine.isPlayingFlow.collectAsState()
+    val sourceName by app.syncEngine.sourceNameFlow.collectAsState()
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -396,7 +397,7 @@ fun PlayerAndOverlayTab(
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
-                                    imageVector = if (syncState.isPlaying) Icons.Default.MusicNote else Icons.Default.Pause,
+                                    imageVector = if (isPlaying) Icons.Default.MusicNote else Icons.Default.Pause,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary
                                 )
@@ -420,9 +421,9 @@ fun PlayerAndOverlayTab(
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            if (!syncState.sourceName.isNullOrBlank()) {
+                            if (!sourceName.isNullOrBlank()) {
                                 Text(
-                                    text = "Synced via ${syncState.sourceName}",
+                                    text = "Synced via $sourceName",
                                     fontSize = 11.sp,
                                     color = Color(0xFF1DB954)
                                 )
@@ -446,7 +447,7 @@ fun PlayerAndOverlayTab(
                             colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
                             Icon(
-                                imageVector = if (syncState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                 contentDescription = "Play/Pause"
                             )
                         }

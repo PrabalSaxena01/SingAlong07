@@ -94,14 +94,25 @@ class MediaSessionControllerBridge(
 
     private fun extractAlbumArtAndPalette(metadata: MediaMetadata?) {
         if (metadata == null) return
-        val bitmap = metadata.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
+        val rawBitmap = metadata.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
             ?: metadata.getBitmap(MediaMetadata.METADATA_KEY_ART)
             ?: metadata.description?.iconBitmap
 
-        if (bitmap != null) {
+        if (rawBitmap != null) {
+            // Downscale to at most 160x160 for optimal memory footprint and zero GPU fill lag
+            val bitmap = if (rawBitmap.width > 160 || rawBitmap.height > 160) {
+                val maxDim = maxOf(rawBitmap.width, rawBitmap.height)
+                val scale = 160f / maxDim
+                val dstWidth = (rawBitmap.width * scale).toInt().coerceAtLeast(1)
+                val dstHeight = (rawBitmap.height * scale).toInt().coerceAtLeast(1)
+                Bitmap.createScaledBitmap(rawBitmap, dstWidth, dstHeight, true)
+            } else {
+                rawBitmap
+            }
+
             _albumArtBitmap.value = bitmap
             try {
-                Palette.from(bitmap).generate { palette ->
+                Palette.from(bitmap).maximumColorCount(16).generate { palette ->
                     if (palette != null) {
                         val dominant = Color(palette.getDominantColor(0xFF1E2129.toInt()))
                         val vibrant = Color(palette.getVibrantColor(palette.getLightVibrantColor(0xFF00FFFF.toInt())))
@@ -175,7 +186,7 @@ class MediaSessionControllerBridge(
                 val estimatedCurrentMs = basePositionMs + (timeDelta * speed).toLong()
 
                 syncEngine.updatePlaybackPosition(estimatedCurrentMs, isPlaying = true)
-                delay(33L) // ~30 fps ticker
+                delay(200L) // 200ms ticker: ultra-lightweight 5Hz loop, eliminating CPU overheating and UI frame drops
             }
         }
     }

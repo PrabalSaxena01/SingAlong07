@@ -24,7 +24,7 @@ fun FloatingOverlayRoot(
 ) {
     val app = SingAlongApp.instance
     val settings by app.preferencesManager.settingsFlow.collectAsState()
-    val syncState by app.syncEngine.syncState.collectAsState()
+    val isPlaying by app.syncEngine.isPlayingFlow.collectAsState()
 
     val currentTitle by controllerBridge.currentTrackTitle.collectAsState()
     val currentArtist by controllerBridge.currentArtist.collectAsState()
@@ -100,6 +100,7 @@ fun FloatingOverlayRoot(
             label = "pill_card_morph"
         ) { expanded ->
             if (expanded) {
+                val syncState by app.syncEngine.syncState.collectAsState()
                 Box(
                     modifier = Modifier
                         .width(320.dp)
@@ -176,7 +177,7 @@ fun FloatingOverlayRoot(
                 FloatingPillView(
                     trackTitle = currentTitle ?: "SingAlong07",
                     artistName = currentArtist ?: "No Media",
-                    isPlaying = syncState.isPlaying,
+                    isPlaying = isPlaying,
                     colorScheme = colorScheme,
                     albumArt = albumArtBitmap,
                     isAudioCatching = isAudioCatching,

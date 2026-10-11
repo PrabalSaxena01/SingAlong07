@@ -32,6 +32,12 @@ class BiDirectionalSyncEngine {
     private val _syncState = MutableStateFlow(SyncPlaybackState())
     val syncState: StateFlow<SyncPlaybackState> = _syncState.asStateFlow()
 
+    private val _isPlayingFlow = MutableStateFlow(false)
+    val isPlayingFlow: StateFlow<Boolean> = _isPlayingFlow.asStateFlow()
+
+    private val _sourceNameFlow = MutableStateFlow<String?>(null)
+    val sourceNameFlow: StateFlow<String?> = _sourceNameFlow.asStateFlow()
+
     private var activeLines: List<DualLanguageLyricLine> = emptyList()
     private var totalDurationMs: Long = 0L
     private var currentUserOffsetMs: Long = 0L
@@ -39,6 +45,7 @@ class BiDirectionalSyncEngine {
     fun startLoadingLyrics(durationMs: Long = 0L) {
         this.activeLines = emptyList()
         this.totalDurationMs = durationMs
+        _sourceNameFlow.value = null
         _syncState.update {
             it.copy(
                 lines = emptyList(),
@@ -54,6 +61,7 @@ class BiDirectionalSyncEngine {
     fun setLyricsNotFound(durationMs: Long = 0L) {
         this.activeLines = emptyList()
         this.totalDurationMs = durationMs
+        _sourceNameFlow.value = null
         _syncState.update {
             it.copy(
                 lines = emptyList(),
@@ -76,6 +84,7 @@ class BiDirectionalSyncEngine {
         this.activeLines = lines
         this.totalDurationMs = durationMs
         val tier = if (isWordByWord) SyncResolutionTier.TIER_1_WORD_BY_WORD else SyncResolutionTier.TIER_2_LINE_BY_LINE
+        _sourceNameFlow.value = sourceName
 
         _syncState.update {
             it.copy(
@@ -103,6 +112,7 @@ class BiDirectionalSyncEngine {
         val rawLines = plainText.lines().map { it.trim() }.filter { it.isNotBlank() }
 
         if (rawLines.isEmpty() || durationMs <= 0L) {
+            _sourceNameFlow.value = null
             _syncState.update {
                 it.copy(
                     lines = emptyList(),
@@ -137,6 +147,7 @@ class BiDirectionalSyncEngine {
         }
 
         this.activeLines = estimatedLines
+        _sourceNameFlow.value = sourceName
         _syncState.update {
             it.copy(
                 lines = estimatedLines,
@@ -154,13 +165,25 @@ class BiDirectionalSyncEngine {
         val effectivePosition = mediaPositionMs + currentUserOffsetMs
         val lineIndex = binarySearchActiveLine(effectivePosition)
 
-        _syncState.update {
-            it.copy(
-                currentPositionMs = mediaPositionMs,
-                isPlaying = isPlaying,
-                activeLineIndex = lineIndex,
-                userOffsetMs = currentUserOffsetMs
-            )
+        if (_isPlayingFlow.value != isPlaying) {
+            _isPlayingFlow.value = isPlaying
+        }
+
+        val current = _syncState.value
+        val lineChanged = current.activeLineIndex != lineIndex
+        val playStateChanged = current.isPlaying != isPlaying
+        val posDelta = kotlin.math.abs(mediaPositionMs - current.currentPositionMs)
+        val posChanged = posDelta >= 200L
+
+        if (lineChanged || playStateChanged || posChanged) {
+            _syncState.update {
+                it.copy(
+                    currentPositionMs = mediaPositionMs,
+                    isPlaying = isPlaying,
+                    activeLineIndex = lineIndex,
+                    userOffsetMs = currentUserOffsetMs
+                )
+            }
         }
     }
 

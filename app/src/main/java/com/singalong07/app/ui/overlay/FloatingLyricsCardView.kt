@@ -72,19 +72,17 @@ fun FloatingLyricsCardView(
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     var isUserScrubbing by remember { mutableStateOf(false) }
-    var scrubProgress by remember { mutableFloatStateOf(0f) }
 
-    val isCurrentLineVisible by remember(syncState.activeLineIndex) {
+    val isCurrentLineVisible by remember(listState, syncState.activeLineIndex) {
         derivedStateOf {
             if (syncState.activeLineIndex < 0) true
             else {
-                val visibleIndices = listState.layoutInfo.visibleItemsInfo.map { it.index }
-                syncState.activeLineIndex in visibleIndices
+                listState.layoutInfo.visibleItemsInfo.any { it.index == syncState.activeLineIndex }
             }
         }
     }
 
-    val isLineAbove by remember(syncState.activeLineIndex) {
+    val isLineAbove by remember(listState, syncState.activeLineIndex) {
         derivedStateOf {
             val firstIndex = listState.layoutInfo.visibleItemsInfo.firstOrNull()?.index ?: 0
             syncState.activeLineIndex < firstIndex
@@ -425,7 +423,10 @@ fun FloatingLyricsCardView(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                         contentPadding = PaddingValues(vertical = 24.dp)
                     ) {
-                        itemsIndexed(syncState.lines) { index, line ->
+                        itemsIndexed(
+                            items = syncState.lines,
+                            key = { index, line -> "${line.timestampMs}_$index" }
+                        ) { index, line ->
                             val isActive = index == syncState.activeLineIndex
                             InteractiveLyricLineItem(
                                 line = line,
@@ -486,44 +487,13 @@ fun FloatingLyricsCardView(
 
             // Interactive Seek Bar / Timeline Scrubber
             if (syncState.durationMs > 0) {
-                val currentPos = if (isUserScrubbing) (scrubProgress * syncState.durationMs).toLong() else syncState.currentPositionMs
-                val progress = if (syncState.durationMs > 0) (currentPos.toFloat() / syncState.durationMs).coerceIn(0f, 1f) else 0f
-
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = formatTime(currentPos),
-                        color = colorScheme.inactiveLineColor,
-                        fontSize = 10.sp
-                    )
-
-                    Slider(
-                        value = if (isUserScrubbing) scrubProgress else progress,
-                        onValueChange = {
-                            isUserScrubbing = true
-                            scrubProgress = it
-                        },
-                        onValueChangeFinished = {
-                            val targetMs = (scrubProgress * syncState.durationMs).toLong()
-                            onSeekToTimestamp(targetMs)
-                            isUserScrubbing = false
-                        },
-                        colors = SliderDefaults.colors(
-                            thumbColor = colorScheme.accentColor,
-                            activeTrackColor = colorScheme.accentColor,
-                            inactiveTrackColor = colorScheme.surfaceColor
-                        ),
-                        modifier = Modifier.weight(1f).padding(horizontal = 4.dp).height(24.dp)
-                    )
-
-                    Text(
-                        text = formatTime(syncState.durationMs),
-                        color = colorScheme.inactiveLineColor,
-                        fontSize = 10.sp
-                    )
-                }
+                FloatingTimelineScrubber(
+                    durationMs = syncState.durationMs,
+                    currentPositionMs = syncState.currentPositionMs,
+                    colorScheme = colorScheme,
+                    onSeekToTimestamp = onSeekToTimestamp,
+                    onScrubbingChanged = { isUserScrubbing = it }
+                )
             }
 
             // Bottom Transport Bar
@@ -828,3 +798,59 @@ private fun ProviderRetryOption(
         }
     }
 }
+
+@Composable
+private fun FloatingTimelineScrubber(
+    durationMs: Long,
+    currentPositionMs: Long,
+    colorScheme: OverlayColorScheme,
+    onSeekToTimestamp: (Long) -> Unit,
+    onScrubbingChanged: (Boolean) -> Unit
+) {
+    var isUserScrubbing by remember { mutableStateOf(false) }
+    var scrubProgress by remember { mutableFloatStateOf(0f) }
+
+    val currentPos = if (isUserScrubbing) (scrubProgress * durationMs).toLong() else currentPositionMs
+    val progress = if (durationMs > 0) (currentPos.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = formatTime(currentPos),
+            color = colorScheme.inactiveLineColor,
+            fontSize = 10.sp
+        )
+
+        Slider(
+            value = if (isUserScrubbing) scrubProgress else progress,
+            onValueChange = {
+                if (!isUserScrubbing) {
+                    isUserScrubbing = true
+                    onScrubbingChanged(true)
+                }
+                scrubProgress = it
+            },
+            onValueChangeFinished = {
+                val targetMs = (scrubProgress * durationMs).toLong()
+                onSeekToTimestamp(targetMs)
+                isUserScrubbing = false
+                onScrubbingChanged(false)
+            },
+            colors = SliderDefaults.colors(
+                thumbColor = colorScheme.accentColor,
+                activeTrackColor = colorScheme.accentColor,
+                inactiveTrackColor = colorScheme.surfaceColor
+            ),
+            modifier = Modifier.weight(1f).padding(horizontal = 4.dp).height(24.dp)
+        )
+
+        Text(
+            text = formatTime(durationMs),
+            color = colorScheme.inactiveLineColor,
+            fontSize = 10.sp
+        )
+    }
+}
+

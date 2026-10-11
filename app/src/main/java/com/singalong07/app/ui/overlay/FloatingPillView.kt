@@ -53,29 +53,6 @@ fun FloatingPillView(
     onDragWindowEnd: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    // Mini equalizer animation
-    val infiniteTransition = rememberInfiniteTransition(label = "equalizer")
-    val barHeight1 by infiniteTransition.animateFloat(
-        initialValue = 4f,
-        targetValue = 14f,
-        animationSpec = infiniteRepeatable(tween(400, easing = LinearEasing), RepeatMode.Reverse),
-        label = "bar1"
-    )
-    val barHeight2 by infiniteTransition.animateFloat(
-        initialValue = 12f,
-        targetValue = 6f,
-        animationSpec = infiniteRepeatable(tween(350, easing = LinearEasing), RepeatMode.Reverse),
-        label = "bar2"
-    )
-
-    // Audio Catch pulse animation
-    val catchPulse by infiniteTransition.animateFloat(
-        initialValue = 0.92f,
-        targetValue = 1.12f,
-        animationSpec = infiniteRepeatable(tween(600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "catchPulse"
-    )
-
     Surface(
         modifier = modifier.clip(RoundedCornerShape(32.dp)),
         color = colorScheme.backgroundColor.copy(alpha = colorScheme.backgroundAlpha),
@@ -173,27 +150,10 @@ fun FloatingPillView(
                     )
                 }
 
-                // Animated Equalizer Bars
+                // Animated Equalizer Bars (only rendered and animated when playing)
                 if (isPlaying) {
                     Spacer(modifier = Modifier.width(6.dp))
-                    Row(
-                        verticalAlignment = Alignment.Bottom,
-                        modifier = Modifier.height(14.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .width(2.5.dp)
-                                .height(barHeight1.dp)
-                                .background(colorScheme.accentColor, RoundedCornerShape(1.dp))
-                        )
-                        Spacer(modifier = Modifier.width(2.dp))
-                        Box(
-                            modifier = Modifier
-                                .width(2.5.dp)
-                                .height(barHeight2.dp)
-                                .background(colorScheme.accentColor, RoundedCornerShape(1.dp))
-                        )
-                    }
+                    AnimatedEqualizerBars(accentColor = colorScheme.accentColor)
                 }
             }
 
@@ -212,47 +172,12 @@ fun FloatingPillView(
             // Audio Catching Icon Button
             // Tap: Capture & Identify ambient audio (AudD + auto lyrics sync)
             // Long Press: Launch Google Music Search (Sound Search)
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .then(
-                        if (isAudioCatching) Modifier.scale(catchPulse)
-                        else Modifier
-                    )
-                    .clip(CircleShape)
-                    .background(
-                        if (isAudioCatching) Color(0xFF00E5FF).copy(alpha = 0.25f)
-                        else colorScheme.accentColor.copy(alpha = 0.16f)
-                    )
-                    .border(
-                        BorderStroke(
-                            1.dp,
-                            if (isAudioCatching) Color(0xFF00E5FF)
-                            else colorScheme.accentColor.copy(alpha = 0.35f)
-                        ),
-                        CircleShape
-                    )
-                    .combinedClickable(
-                        onClick = onCatchAudio,
-                        onLongClick = onLaunchGoogleSoundSearch
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                if (isAudioCatching) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(16.dp),
-                        color = Color(0xFF00E5FF),
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Icon(
-                        imageVector = Icons.Default.GraphicEq,
-                        contentDescription = "Catch Audio (Tap for in-app ID, Long-press for Google Sound Search)",
-                        tint = colorScheme.accentColor,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
+            AudioCatchPillButton(
+                isAudioCatching = isAudioCatching,
+                colorScheme = colorScheme,
+                onCatchAudio = onCatchAudio,
+                onLaunchGoogleSoundSearch = onLaunchGoogleSoundSearch
+            )
         }
     }
 }
@@ -273,3 +198,101 @@ private fun Surface(
         content = content
     )
 }
+
+@Composable
+private fun AnimatedEqualizerBars(accentColor: Color) {
+    val infiniteTransition = rememberInfiniteTransition(label = "equalizer")
+    val barHeight1 by infiniteTransition.animateFloat(
+        initialValue = 4f,
+        targetValue = 14f,
+        animationSpec = infiniteRepeatable(tween(400, easing = LinearEasing), RepeatMode.Reverse),
+        label = "bar1"
+    )
+    val barHeight2 by infiniteTransition.animateFloat(
+        initialValue = 12f,
+        targetValue = 6f,
+        animationSpec = infiniteRepeatable(tween(350, easing = LinearEasing), RepeatMode.Reverse),
+        label = "bar2"
+    )
+
+    Row(
+        verticalAlignment = Alignment.Bottom,
+        modifier = Modifier.height(14.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .width(2.5.dp)
+                .height(barHeight1.dp)
+                .background(accentColor, RoundedCornerShape(1.dp))
+        )
+        Spacer(modifier = Modifier.width(2.dp))
+        Box(
+            modifier = Modifier
+                .width(2.5.dp)
+                .height(barHeight2.dp)
+                .background(accentColor, RoundedCornerShape(1.dp))
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun AudioCatchPillButton(
+    isAudioCatching: Boolean,
+    colorScheme: OverlayColorScheme,
+    onCatchAudio: () -> Unit,
+    onLaunchGoogleSoundSearch: () -> Unit
+) {
+    val pulseModifier = if (isAudioCatching) {
+        val infiniteTransition = rememberInfiniteTransition(label = "catchPulse")
+        val pulse by infiniteTransition.animateFloat(
+            initialValue = 0.92f,
+            targetValue = 1.12f,
+            animationSpec = infiniteRepeatable(tween(600, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+            label = "catchPulse"
+        )
+        Modifier.scale(pulse)
+    } else {
+        Modifier
+    }
+
+    Box(
+        modifier = Modifier
+            .size(28.dp)
+            .then(pulseModifier)
+            .clip(CircleShape)
+            .background(
+                if (isAudioCatching) Color(0xFF00E5FF).copy(alpha = 0.25f)
+                else colorScheme.accentColor.copy(alpha = 0.16f)
+            )
+            .border(
+                BorderStroke(
+                    1.dp,
+                    if (isAudioCatching) Color(0xFF00E5FF)
+                    else colorScheme.accentColor.copy(alpha = 0.35f)
+                ),
+                CircleShape
+            )
+            .combinedClickable(
+                onClick = onCatchAudio,
+                onLongClick = onLaunchGoogleSoundSearch
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        if (isAudioCatching) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(16.dp),
+                color = Color(0xFF00E5FF),
+                strokeWidth = 2.dp
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Default.GraphicEq,
+                contentDescription = "Catch Audio (Tap for in-app ID, Long-press for Google Sound Search)",
+                tint = colorScheme.accentColor,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+    }
+}
+
