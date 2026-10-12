@@ -108,10 +108,11 @@ class BiDirectionalSyncEngine {
         durationMs: Long,
         sourceName: String? = null
     ) {
-        this.totalDurationMs = durationMs
+        val safeDuration = if (durationMs > 0L) durationMs else 180000L
+        this.totalDurationMs = safeDuration
         val rawLines = plainText.lines().map { it.trim() }.filter { it.isNotBlank() }
 
-        if (rawLines.isEmpty() || durationMs <= 0L) {
+        if (rawLines.isEmpty()) {
             _sourceNameFlow.value = null
             _syncState.update {
                 it.copy(
@@ -125,9 +126,9 @@ class BiDirectionalSyncEngine {
             return
         }
 
-        val introTimeMs = (durationMs * 0.08).toLong().coerceAtLeast(3000L)
-        val outroTimeMs = (durationMs * 0.05).toLong().coerceAtLeast(3000L)
-        val singingWindowMs = (durationMs - introTimeMs - outroTimeMs).coerceAtLeast(10000L)
+        val introTimeMs = (safeDuration * 0.08).toLong().coerceAtLeast(3000L)
+        val outroTimeMs = (safeDuration * 0.05).toLong().coerceAtLeast(3000L)
+        val singingWindowMs = (safeDuration - introTimeMs - outroTimeMs).coerceAtLeast(10000L)
 
         val totalWordCount = rawLines.sumOf { it.split(Regex("""\s+""")).size }.coerceAtLeast(1)
         var cumulativeTimeMs = introTimeMs
@@ -151,7 +152,7 @@ class BiDirectionalSyncEngine {
         _syncState.update {
             it.copy(
                 lines = estimatedLines,
-                durationMs = durationMs,
+                durationMs = safeDuration,
                 tier = SyncResolutionTier.TIER_3_HEURISTIC_PACING,
                 isLoading = false,
                 lyricsNotFound = false,

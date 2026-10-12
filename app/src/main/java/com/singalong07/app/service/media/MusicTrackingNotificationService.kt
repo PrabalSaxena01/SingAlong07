@@ -23,6 +23,8 @@ class MusicTrackingNotificationService : NotificationListenerService() {
     private var mediaSessionManager: MediaSessionManager? = null
     private var controllerBridge: MediaSessionControllerBridge? = null
     private var lastTrackHash: String = ""
+    private var lastTrackIdentity: String = ""
+    private var currentPreferredSource: String? = null
     private var lyricsFetchJob: Job? = null
 
     private val sessionsChangedListener = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
@@ -203,8 +205,22 @@ class MusicTrackingNotificationService : NotificationListenerService() {
         preferredSourceOverride: String? = null,
         isAudioCaptured: Boolean = false
     ) {
+        val app = SingAlongApp.instance
         val cleaned = TrackMetadataCleaner.clean(rawTitle, rawArtist)
-        val trackHash = "${cleaned.artist.lowercase()}__${cleaned.title.lowercase()}__${preferredSourceOverride ?: ""}"
+        val trackIdentity = "${cleaned.artist.lowercase()}__${cleaned.title.lowercase()}"
+
+        // Reset provider override if a new track starts; otherwise keep manual provider sticky
+        if (trackIdentity != lastTrackIdentity) {
+            currentPreferredSource = preferredSourceOverride
+            lastTrackIdentity = trackIdentity
+        } else if (preferredSourceOverride != null) {
+            currentPreferredSource = preferredSourceOverride
+        }
+
+        val effectiveSource = currentPreferredSource
+            ?: app.preferencesManager.settingsFlow.value.preferredProviderId
+
+        val trackHash = "${trackIdentity}__${effectiveSource}"
 
         if (trackHash == lastTrackHash && lastTrackHash.isNotBlank()) return
         lastTrackHash = trackHash
@@ -214,14 +230,12 @@ class MusicTrackingNotificationService : NotificationListenerService() {
 
         // CRITICAL BUG FIX: Immediately clear previous song lyrics and enter loading state!
         // This ensures old lyrics never linger for 1 second when changing songs.
-        val app = SingAlongApp.instance
         app.syncEngine.startLoadingLyrics(durationMs)
 
         // Cancel any in-flight lyrics fetch so old slow queries don't overwrite the new track
         lyricsFetchJob?.cancel()
         lyricsFetchJob = serviceScope.launch {
-            val preferredSource = preferredSourceOverride
-                ?: app.preferencesManager.settingsFlow.value.preferredProviderId
+            val preferredSource = effectiveSource
 
             // 1. Restore saved user timing calibration offset from Room DB
             val savedOffset = app.database.historyDao().getOffsetForTrack(trackHash) ?: 0L

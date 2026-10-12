@@ -47,16 +47,25 @@ class LyricsAggregatorRepository(
             return@withContext Result.success(cached)
         }
 
-        // If user has a preferred source, prioritize it first
-        val sortedSources = if (!preferredSourceId.isNullOrBlank() && preferredSourceId != "auto") {
-            sources.sortedByDescending { it.id == preferredSourceId }
-        } else {
-            sources
+        // If user explicitly picked a preferred source, query it first.
+        // If it succeeds with either synced LRC or plain lyrics, respect the user's choice immediately!
+        if (!preferredSourceId.isNullOrBlank() && preferredSourceId != "auto") {
+            val preferred = sources.firstOrNull { it.id == preferredSourceId }
+            if (preferred != null) {
+                val result = preferred.fetchLyrics(title, artist, album, durationSeconds)
+                if (result.isSuccess) {
+                    val lyricsResult = result.getOrThrow()
+                    if (!lyricsResult.syncedLrc.isNullOrBlank() || !lyricsResult.plainLyrics.isNullOrBlank()) {
+                        memoryCache[cacheKey] = lyricsResult
+                        return@withContext Result.success(lyricsResult)
+                    }
+                }
+            }
         }
 
         var plainFallbackResult: LyricsResult? = null
 
-        for (source in sortedSources) {
+        for (source in sources) {
             val result = source.fetchLyrics(title, artist, album, durationSeconds)
             if (result.isSuccess) {
                 val lyricsResult = result.getOrThrow()
