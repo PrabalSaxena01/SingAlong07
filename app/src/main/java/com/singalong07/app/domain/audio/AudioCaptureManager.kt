@@ -52,10 +52,33 @@ class AudioCaptureManager {
     }
 
     /**
-     * Directly triggers Google Sound Search / Music Search intent.
-     * Incorporates Google's ambient audio recognition.
+     * Directly triggers Google Sound Search / Music Search intent in a very small
+     * floating mini-window launcher (Shazam-style) and auto-extracts via Accessibility.
      */
     fun launchGoogleMusicSearch(context: Context): Boolean {
+        if (!com.singalong07.app.service.accessibility.SingAlongAccessibilityService.isAccessibilityEnabled(context)) {
+            android.widget.Toast.makeText(
+                context,
+                "Tip: Enable SingAlong07 in Accessibility to auto-extract & auto-close Google seamlessly!",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+        }
+
+        val metrics = context.resources.displayMetrics
+        val density = metrics.density
+        // Very small compact dimensions (Shazam pop-up style): 220dp x 180dp
+        val targetWidthPx = (220 * density).toInt().coerceIn((metrics.widthPixels * 0.35).toInt(), (metrics.widthPixels * 0.55).toInt())
+        val targetHeightPx = (180 * density).toInt().coerceIn((metrics.heightPixels * 0.18).toInt(), (metrics.heightPixels * 0.28).toInt())
+        val left = (metrics.widthPixels - targetWidthPx) / 2
+        val top = (metrics.heightPixels - targetHeightPx - (40 * density).toInt()).coerceAtLeast(0)
+        val bounds = android.graphics.Rect(left, top, left + targetWidthPx, top + targetHeightPx)
+
+        val activityOptions = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+            android.app.ActivityOptions.makeBasic().apply {
+                setLaunchBounds(bounds)
+            }.toBundle()
+        } else null
+
         val candidates = listOf(
             Intent("com.google.android.googlequicksearchbox.MUSIC_SEARCH").apply {
                 setPackage("com.google.android.googlequicksearchbox")
@@ -83,11 +106,23 @@ class AudioCaptureManager {
         )
 
         for (intent in candidates) {
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            intent.addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
+                Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or
+                Intent.FLAG_ACTIVITY_NO_ANIMATION
+            )
+            // OEM floating mini-window extras (Samsung One UI, Xiaomi HyperOS/MIUI, ColorOS)
+            intent.putExtra("android.intent.extra.WINDOW_MODE", 5) // Freeform
+            intent.putExtra("com.samsung.android.intent.extra.WINDOW_MODE", 5)
+            intent.putExtra("miui.intent.extra.FREEFORM_LAUNCH", true)
+            intent.putExtra("miui.intent.extra.OPEN_IN_MINI_WINDOW", true)
+            intent.putExtra("oppo.intent.extra.OPEN_IN_MINI_WINDOW", true)
+
             try {
                 val activities = context.packageManager.queryIntentActivities(intent, 0)
                 if (activities.isNotEmpty()) {
-                    context.startActivity(intent)
+                    context.startActivity(intent, activityOptions)
                     return true
                 }
             } catch (_: Exception) {}
@@ -95,9 +130,17 @@ class AudioCaptureManager {
 
         // Direct launch fallback without package manager query
         for (intent in candidates) {
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            intent.addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_MULTIPLE_TASK or
+                Intent.FLAG_ACTIVITY_LAUNCH_ADJACENT or
+                Intent.FLAG_ACTIVITY_NO_ANIMATION
+            )
+            intent.putExtra("android.intent.extra.WINDOW_MODE", 5)
+            intent.putExtra("com.samsung.android.intent.extra.WINDOW_MODE", 5)
+            intent.putExtra("miui.intent.extra.FREEFORM_LAUNCH", true)
             try {
-                context.startActivity(intent)
+                context.startActivity(intent, activityOptions)
                 return true
             } catch (_: Exception) {}
         }

@@ -2,4 +2,5 @@
     <string name="app_name">SingAlong07</string>
     <string name="overlay_service_title">SingAlong07 Active</string>
     <string name="overlay_service_desc">Floating lyrics synchronized</string>
+    <string name="accessibility_service_description">SingAlong07 Accessibility Service automatically detects songs recognized by Google Sound Search, extracts the song details, and returns you directly to your music.</string>
 </resources>

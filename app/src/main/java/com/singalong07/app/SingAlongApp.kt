@@ -138,6 +138,68 @@ class SingAlongApp : Application() {
         ).show()
     }
 
+    fun onExternalSongIdentified(
+        title: String,
+        artist: String,
+        sourcePackage: String = "google.soundsearch"
+    ) {
+        controllerBridge.updateDisplayMetadata(title, artist)
+        syncEngine.updatePlaybackPosition(0L, isPlaying = true)
+
+        appScope.launch {
+            syncEngine.startLoadingLyrics(180000L)
+            val cleaned = com.singalong07.app.domain.cleaner.TrackMetadataCleaner.clean(title, artist)
+            val provider = preferencesManager.settingsFlow.value.preferredProviderId
+            val result = lyricsRepository.getLyricsCascading(
+                title = cleaned.title,
+                artist = cleaned.artist,
+                durationSeconds = 180L,
+                preferredSourceId = provider
+            )
+
+            var lyricSource = "None"
+            var syncType = "NONE"
+
+            if (result.isSuccess) {
+                val lyrics = result.getOrThrow()
+                lyricSource = lyrics.sourceName
+                if (!lyrics.syncedLrc.isNullOrBlank()) {
+                    val parsed = com.singalong07.app.domain.parser.LrcParser.parse(lyrics.syncedLrc)
+                    syncEngine.loadSyncedLyrics(parsed.lines, 180000L, parsed.isWordByWord, lyricSource)
+                    syncType = if (parsed.isWordByWord) "WORD_BY_WORD" else "SYNCED_LRC"
+                } else if (!lyrics.plainLyrics.isNullOrBlank()) {
+                    syncEngine.loadPlainLyricsWithPacingFallback(lyrics.plainLyrics, 180000L, lyricSource)
+                    syncType = "PACED_PLAIN"
+                } else {
+                    syncEngine.setLyricsNotFound(180000L)
+                }
+            } else {
+                syncEngine.setLyricsNotFound(180000L)
+            }
+
+            // Log into Room DB history as Audio Captured!
+            database.historyDao().insertHistory(
+                com.singalong07.app.data.db.ListeningHistoryEntity(
+                    trackTitle = title,
+                    artistName = artist,
+                    albumName = null,
+                    durationMs = 180000L,
+                    sourcePackage = sourcePackage,
+                    lyricSource = lyricSource,
+                    lyricSyncType = syncType,
+                    userOffsetMs = 0L,
+                    matchedViaFingerprint = true
+                )
+            )
+
+            android.widget.Toast.makeText(
+                this@SingAlongApp,
+                "🎙️ Identified: $title by $artist",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
     fun reloadCurrentLyrics(preferredSourceId: String? = null) {
         val trackingService = com.singalong07.app.service.media.MusicTrackingNotificationService.instance
         if (trackingService != null && trackingService.hasActiveTrack()) {

@@ -861,6 +861,68 @@ fun AppSettingsTab(
                 }
             }
         }
+
+        item {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val isA11yEnabled = remember(context) {
+                com.singalong07.app.service.accessibility.SingAlongAccessibilityService.isAccessibilityEnabled(context)
+            }
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Google Sound Search Auto-Extractor", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Enables Shazam-like instant capture: launches Google in a mini window, grabs the identified song title/artist, and auto-dismisses Google back to your music.",
+                        fontSize = 12.sp,
+                        color = Color.Gray,
+                        lineHeight = 16.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text(
+                                text = if (isA11yEnabled) "Accessibility Active ✓" else "Accessibility Permission Required",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp,
+                                color = if (isA11yEnabled) Color(0xFF00E676) else MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = if (isA11yEnabled) "Auto-extract & auto-close active" else "Tap to enable SingAlong07 in Accessibility",
+                                fontSize = 11.sp,
+                                color = Color.Gray
+                            )
+                        }
+
+                        Button(
+                            onClick = {
+                                com.singalong07.app.service.accessibility.SingAlongAccessibilityService.openAccessibilitySettings(context)
+                            },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isA11yEnabled) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.primary
+                            ),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.height(34.dp)
+                        ) {
+                            Text(
+                                text = if (isA11yEnabled) "Configured" else "Enable",
+                                fontSize = 12.sp,
+                                color = if (isA11yEnabled) MaterialTheme.colorScheme.onSurfaceVariant else Color.White
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
