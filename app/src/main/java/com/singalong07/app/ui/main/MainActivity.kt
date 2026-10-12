@@ -816,14 +816,16 @@ fun AppSettingsTab(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
-                            Text("Lyrics In-Memory Cache", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                            Text("$cachedLyricsCount songs stored in RAM", fontSize = 12.sp, color = Color.Gray)
+                            Text("Lyrics & Offline Cache", fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                            Text("$cachedLyricsCount songs cached offline & in RAM", fontSize = 12.sp, color = Color.Gray)
                         }
                         OutlinedButton(
                             onClick = {
-                                app.lyricsRepository.clearCache()
-                                cachedLyricsCount = 0
-                                Toast.makeText(app, "Lyrics cache cleared!", Toast.LENGTH_SHORT).show()
+                                coroutineScope.launch {
+                                    app.lyricsRepository.clearCache()
+                                    cachedLyricsCount = 0
+                                    Toast.makeText(app, "Lyrics cache cleared!", Toast.LENGTH_SHORT).show()
+                                }
                             },
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                             modifier = Modifier.height(32.dp)

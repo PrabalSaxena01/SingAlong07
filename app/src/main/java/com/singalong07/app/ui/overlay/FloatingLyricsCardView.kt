@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -57,6 +58,7 @@ fun FloatingLyricsCardView(
     onSkipPrevious: () -> Unit,
     onNudgeOffset: (Long) -> Unit,
     onResetOffset: () -> Unit = {},
+    onSyncWithLine: (Int) -> Unit = {},
     onSwitchProvider: (String) -> Unit,
     onRetryLyrics: () -> Unit = {},
     onToggleGhostMode: () -> Unit = {},
@@ -435,7 +437,8 @@ fun FloatingLyricsCardView(
                                 fontScale = settings.fontScale,
                                 showTranslation = settings.isTranslationEnabled,
                                 showRomanization = settings.isRomanizationEnabled,
-                                onClick = { onLineClicked(index) }
+                                onClick = { onLineClicked(index) },
+                                onLongClick = { onSyncWithLine(index) }
                             )
                         }
                     }
@@ -483,6 +486,16 @@ fun FloatingLyricsCardView(
                         }
                     }
                 }
+            }
+
+            if (syncState.lines.isNotEmpty()) {
+                Text(
+                    text = "Tap line to seek • Long-press to sync with current audio",
+                    color = colorScheme.inactiveLineColor.copy(alpha = 0.5f),
+                    fontSize = 9.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 1.dp)
+                )
             }
 
             // Interactive Seek Bar / Timeline Scrubber
@@ -557,6 +570,7 @@ fun FloatingLyricsCardView(
     }
 }
 
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 private fun InteractiveLyricLineItem(
     line: DualLanguageLyricLine,
@@ -565,7 +579,8 @@ private fun InteractiveLyricLineItem(
     fontScale: LyricFontScale,
     showTranslation: Boolean,
     showRomanization: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongClick: () -> Unit = {}
 ) {
     val scale by animateFloatAsState(targetValue = if (isActive) 1.04f else 0.98f, label = "lineScale")
     val textColor by animateColorAsState(
@@ -580,11 +595,12 @@ private fun InteractiveLyricLineItem(
             .fillMaxWidth()
             .scale(scale)
             .clip(RoundedCornerShape(8.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick // Tapping line scrubs media player to this line!
-            )
+            .pointerInput(line.originalText, line.timestampMs) {
+                detectTapGestures(
+                    onTap = { onClick() },
+                    onLongPress = { onLongClick() }
+                )
+            }
             .padding(vertical = 4.dp, horizontal = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {

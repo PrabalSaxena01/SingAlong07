@@ -125,6 +125,9 @@ fun FloatingOverlayRoot(
                             app.syncEngine.resetOffset()
                             app.saveTrackOffset(0L)
                         },
+                        onSyncWithLine = { lineIndex ->
+                            app.syncWithLine(lineIndex)
+                        },
                         onSwitchProvider = { providerId ->
                             app.preferencesManager.updatePreferredProvider(providerId)
                             app.reloadCurrentLyrics(providerId)

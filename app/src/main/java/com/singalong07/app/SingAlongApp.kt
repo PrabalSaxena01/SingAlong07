@@ -40,7 +40,7 @@ class SingAlongApp : Application() {
         database = SingAlongDatabase.getDatabase(this)
         preferencesManager = OverlayPreferencesManager()
         syncEngine = BiDirectionalSyncEngine()
-        lyricsRepository = LyricsAggregatorRepository()
+        lyricsRepository = LyricsAggregatorRepository(lyricsCacheDao = database.lyricsCacheDao())
         controllerBridge = com.singalong07.app.service.media.MediaSessionControllerBridge(syncEngine)
         audioCaptureManager = com.singalong07.app.domain.audio.AudioCaptureManager()
 
@@ -115,12 +115,27 @@ class SingAlongApp : Application() {
     fun saveTrackOffset(offsetMs: Long) {
         val title = controllerBridge.currentTrackTitle.value ?: return
         val artist = controllerBridge.currentArtist.value ?: ""
-        val trackHash = "${artist.trim().lowercase()}__${title.trim().lowercase()}__"
+        val cleaned = com.singalong07.app.domain.cleaner.TrackMetadataCleaner.clean(title, artist)
+        val trackHash = "${cleaned.artist.lowercase()}__${cleaned.title.lowercase()}"
         appScope.launch(Dispatchers.IO) {
             database.historyDao().saveOffsetForTrack(
                 com.singalong07.app.data.db.UserOffsetEntity(trackHash, offsetMs)
             )
+            database.lyricsCacheDao().updateSyncOffset(trackHash, offsetMs)
         }
+    }
+
+    fun syncWithLine(lineIndex: Int) {
+        val currentPos = syncEngine.syncState.value.currentPositionMs
+        val offsetMs = syncEngine.syncWithLine(lineIndex, currentPos) ?: return
+        saveTrackOffset(offsetMs)
+        val offsetSec = String.format(java.util.Locale.US, "%.2f", offsetMs / 1000.0)
+        val sign = if (offsetMs >= 0) "+" else ""
+        android.widget.Toast.makeText(
+            this,
+            "Synced with line #${lineIndex + 1} (${sign}${offsetSec}s)",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
     }
 
     fun reloadCurrentLyrics(preferredSourceId: String? = null) {

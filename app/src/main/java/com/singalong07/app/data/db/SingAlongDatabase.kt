@@ -6,13 +6,18 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [ListeningHistoryEntity::class, UserOffsetEntity::class],
-    version = 1,
+    entities = [
+        ListeningHistoryEntity::class,
+        UserOffsetEntity::class,
+        LyricsCacheEntity::class
+    ],
+    version = 2,
     exportSchema = false
 )
 abstract class SingAlongDatabase : RoomDatabase() {
 
     abstract fun historyDao(): HistoryDao
+    abstract fun lyricsCacheDao(): LyricsCacheDao
 
     companion object {
         @Volatile
@@ -24,7 +29,9 @@ abstract class SingAlongDatabase : RoomDatabase() {
                     context.applicationContext,
                     SingAlongDatabase::class.java,
                     "singalong07.db"
-                ).build()
+                )
+                .fallbackToDestructiveMigration()
+                .build()
                 INSTANCE = instance
                 instance
             }

@@ -227,6 +227,20 @@ class BiDirectionalSyncEngine {
     }
 
     /**
+     * Line-Specific Calibration: Computes and sets the offset required to immediately align
+     * a specific lyric line to the current audio playback position.
+     * Formula: targetLine.timestampMs = currentMediaPositionMs + offset
+     *   => offset = targetLine.timestampMs - currentMediaPositionMs
+     */
+    fun syncWithLine(lineIndex: Int, currentMediaPositionMs: Long): Long? {
+        if (lineIndex !in activeLines.indices) return null
+        val targetLine = activeLines[lineIndex]
+        val calculatedOffset = targetLine.timestampMs - currentMediaPositionMs
+        setOffset(calculatedOffset)
+        return calculatedOffset
+    }
+
+    /**
      * Bi-Directional Control: Calculates target player seek timestamp
      * when a user taps a lyric line in the floating overlay.
      */
