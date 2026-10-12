@@ -47,69 +47,14 @@ class SingAlongApp : Application() {
         createNotificationChannels()
     }
 
-    fun recordAndCatchAmbientAudio(context: android.content.Context) {
-        val token = preferencesManager.settingsFlow.value.auddApiToken
-        android.widget.Toast.makeText(context, "Listening to audio (5s)...", android.widget.Toast.LENGTH_SHORT).show()
-        appScope.launch {
-            val result = audioCaptureManager.captureAndIdentify(context, token)
-            if (result.isSuccess) {
-                val match = result.getOrThrow()
-                android.widget.Toast.makeText(context, "Identified: ${match.title} - ${match.artist}", android.widget.Toast.LENGTH_SHORT).show()
-                controllerBridge.updateDisplayMetadata(match.title, match.artist)
-                syncEngine.startLoadingLyrics(180000L)
-
-                val lyricsResult = lyricsRepository.getLyricsCascading(
-                    title = match.title,
-                    artist = match.artist,
-                    album = match.album,
-                    preferredSourceId = preferencesManager.settingsFlow.value.preferredProviderId
-                )
-
-                var lyricSource = "None"
-                var syncType = "NOT_FOUND"
-
-                if (lyricsResult.isSuccess) {
-                    val lyrics = lyricsResult.getOrThrow()
-                    lyricSource = lyrics.sourceName
-                    if (!lyrics.syncedLrc.isNullOrBlank()) {
-                        val parsed = com.singalong07.app.domain.parser.LrcParser.parse(lyrics.syncedLrc)
-                        syncEngine.loadSyncedLyrics(parsed.lines, 180000L, parsed.isWordByWord, lyricSource)
-                        syncType = if (parsed.isWordByWord) "WORD_BY_WORD" else "SYNCED_LRC"
-                    } else if (!lyrics.plainLyrics.isNullOrBlank()) {
-                        syncEngine.loadPlainLyricsWithPacingFallback(lyrics.plainLyrics, 180000L, lyricSource)
-                        syncType = "PACED_PLAIN"
-                    } else {
-                        syncEngine.setLyricsNotFound(180000L)
-                    }
-                } else {
-                    syncEngine.setLyricsNotFound(180000L)
-                }
-
-                // Log into Room DB history as Audio Captured!
-                database.historyDao().insertHistory(
-                    com.singalong07.app.data.db.ListeningHistoryEntity(
-                        trackTitle = match.title,
-                        artistName = match.artist,
-                        albumName = match.album,
-                        durationMs = 180000L,
-                        sourcePackage = "ambient.audio",
-                        lyricSource = lyricSource,
-                        lyricSyncType = syncType,
-                        userOffsetMs = 0L,
-                        matchedViaFingerprint = true
-                    )
-                )
-            } else {
-                val ex = result.exceptionOrNull()
-                val message = if (ex is SecurityException) {
-                    "Microphone permission required for audio capture"
-                } else if (token.isBlank()) {
-                    "No match. Note: Enter your free AudD token in App Settings to recognize Reels without pausing!"
-                } else {
-                    "No match found. Try holding device closer or playing for longer."
-                }
-                android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
-            }
+    fun triggerGoogleSoundSearch(context: android.content.Context) {
+        val launched = audioCaptureManager.launchGoogleMusicSearch(context)
+        if (!launched) {
+            android.widget.Toast.makeText(
+                context,
+                "Google Sound Search not available on this device",
+                android.widget.Toast.LENGTH_SHORT
+            ).show()
         }
     }
 

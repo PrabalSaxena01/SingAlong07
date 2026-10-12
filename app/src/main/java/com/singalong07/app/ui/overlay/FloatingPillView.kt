@@ -170,8 +170,7 @@ fun FloatingPillView(
             Spacer(modifier = Modifier.width(6.dp))
 
             // Audio Catching Icon Button
-            // Tap: Capture & Identify ambient audio (AudD + auto lyrics sync)
-            // Long Press: Launch Google Music Search (Sound Search)
+            // Launch Google Music Search (Sound Search)
             AudioCatchPillButton(
                 isAudioCatching = isAudioCatching,
                 colorScheme = colorScheme,
@@ -288,7 +287,7 @@ private fun AudioCatchPillButton(
         } else {
             Icon(
                 imageVector = Icons.Default.GraphicEq,
-                contentDescription = "Catch Audio (Tap for in-app ID, Long-press for Google Sound Search)",
+                contentDescription = "Identify Song with Google Sound Search",
                 tint = colorScheme.accentColor,
                 modifier = Modifier.size(16.dp)
             )
