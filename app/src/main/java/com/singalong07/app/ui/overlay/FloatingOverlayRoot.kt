@@ -36,22 +36,19 @@ fun FloatingOverlayRoot(
     val context = androidx.compose.ui.platform.LocalContext.current
 
     val handleCatchAudio: () -> Unit = {
-        val launched = app.audioCaptureManager.launchGoogleMusicSearch(context)
-        if (!launched) {
-            if (!app.audioCaptureManager.hasRecordPermission(context)) {
-                android.widget.Toast.makeText(
-                    context,
-                    "Microphone permission required. Opening SingAlong07...",
-                    android.widget.Toast.LENGTH_LONG
-                ).show()
-                val intent = android.content.Intent(context, com.singalong07.app.ui.main.MainActivity::class.java).apply {
-                    flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
-                    putExtra("REQUEST_MIC_PERMISSION", true)
-                }
-                context.startActivity(intent)
-            } else {
-                app.recordAndCatchAmbientAudio(context)
+        if (!app.audioCaptureManager.hasRecordPermission(context)) {
+            android.widget.Toast.makeText(
+                context,
+                "Microphone permission required. Opening SingAlong07...",
+                android.widget.Toast.LENGTH_LONG
+            ).show()
+            val intent = android.content.Intent(context, com.singalong07.app.ui.main.MainActivity::class.java).apply {
+                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                putExtra("REQUEST_MIC_PERMISSION", true)
             }
+            context.startActivity(intent)
+        } else {
+            app.recordAndCatchAmbientAudio(context)
         }
     }
 

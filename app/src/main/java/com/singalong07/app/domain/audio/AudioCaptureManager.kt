@@ -151,7 +151,7 @@ class AudioCaptureManager {
      * Records a 5-second PCM snippet from the device microphone / speakers,
      * packages it as a valid WAV byte array, and sends it to acoustic recognition.
      */
-    suspend fun captureAndIdentify(context: Context): Result<AudioMatchResult> = withContext(Dispatchers.IO) {
+    suspend fun captureAndIdentify(context: Context, apiToken: String? = null): Result<AudioMatchResult> = withContext(Dispatchers.IO) {
         if (!hasRecordPermission(context)) {
             _statusText.value = "Microphone permission required"
             return@withContext Result.failure(SecurityException("RECORD_AUDIO permission not granted"))
@@ -208,7 +208,7 @@ class AudioCaptureManager {
             }
 
             val wavBytes = writeWavHeader(rawPcm, sampleRate, 1, 16)
-            val result = queryAudDApi(wavBytes)
+            val result = queryAudDApi(wavBytes, apiToken)
             if (result != null) {
                 _statusText.value = "Matched: ${result.title}"
                 Result.success(result)
@@ -224,14 +224,15 @@ class AudioCaptureManager {
         }
     }
 
-    private fun queryAudDApi(wavBytes: ByteArray): AudioMatchResult? {
+    private fun queryAudDApi(wavBytes: ByteArray, apiToken: String? = null): AudioMatchResult? {
         val boundary = "===Boundary" + System.currentTimeMillis() + "==="
         val lineEnd = "\r\n"
         val twoHyphens = "--"
 
         var connection: HttpURLConnection? = null
         return try {
-            val url = URL("https://api.audd.io/?api_token=test")
+            val tokenParam = if (!apiToken.isNullOrBlank()) apiToken.trim() else "test"
+            val url = URL("https://api.audd.io/?api_token=$tokenParam")
             connection = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "POST"
                 connectTimeout = 10000

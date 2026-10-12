@@ -923,6 +923,49 @@ fun AppSettingsTab(
                 }
             }
         }
+
+        item {
+            var tokenInput by remember(settings.auddApiToken) { mutableStateOf(settings.auddApiToken) }
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Instagram Reels & Shorts Audio Recognition", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Recognize songs playing directly inside Instagram Reels, TikTok, and YouTube Shorts without pausing your video! Uses background microphone capture with AudD API.",
+                        fontSize = 12.sp,
+                        color = Color.Gray,
+                        lineHeight = 16.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    OutlinedTextField(
+                        value = tokenInput,
+                        onValueChange = {
+                            tokenInput = it
+                            app.preferencesManager.updateAuddToken(it)
+                        },
+                        label = { Text("AudD API Token (Free at audd.io)") },
+                        placeholder = { Text("Paste your API token here") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.bodySmall
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        "Get a free token with 300 requests/month at https://audd.io. Once entered, single-tapping the pill recognizes Reels in the background without pausing!",
+                        fontSize = 11.sp,
+                        color = Color.Gray,
+                        lineHeight = 15.sp
+                    )
+                }
+            }
+        }
     }
 }
 

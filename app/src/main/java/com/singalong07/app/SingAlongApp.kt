@@ -48,9 +48,10 @@ class SingAlongApp : Application() {
     }
 
     fun recordAndCatchAmbientAudio(context: android.content.Context) {
-        android.widget.Toast.makeText(context, "Listening for music (5s)... Hold device near speaker", android.widget.Toast.LENGTH_SHORT).show()
+        val token = preferencesManager.settingsFlow.value.auddApiToken
+        android.widget.Toast.makeText(context, "Listening to audio (5s)...", android.widget.Toast.LENGTH_SHORT).show()
         appScope.launch {
-            val result = audioCaptureManager.captureAndIdentify(context)
+            val result = audioCaptureManager.captureAndIdentify(context, token)
             if (result.isSuccess) {
                 val match = result.getOrThrow()
                 android.widget.Toast.makeText(context, "Identified: ${match.title} - ${match.artist}", android.widget.Toast.LENGTH_SHORT).show()
@@ -102,8 +103,10 @@ class SingAlongApp : Application() {
                 val ex = result.exceptionOrNull()
                 val message = if (ex is SecurityException) {
                     "Microphone permission required for audio capture"
+                } else if (token.isBlank()) {
+                    "No match. Note: Enter your free AudD token in App Settings to recognize Reels without pausing!"
                 } else {
-                    "No match found. Try again or long-press for Google Sound Search"
+                    "No match found. Try holding device closer or playing for longer."
                 }
                 android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
             }

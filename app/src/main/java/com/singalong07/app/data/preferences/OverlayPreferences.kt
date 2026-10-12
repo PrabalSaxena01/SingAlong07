@@ -16,7 +16,8 @@ data class OverlaySettings(
     val isRomanizationEnabled: Boolean = true,
     val isClickThroughEnabled: Boolean = false,
     val autoMinimizeWhenIdle: Boolean = true,
-    val preferredProviderId: String = "auto"
+    val preferredProviderId: String = "auto",
+    val auddApiToken: String = ""
 )
 
 class OverlayPreferencesManager {
@@ -54,5 +55,9 @@ class OverlayPreferencesManager {
 
     fun updatePreferredProvider(providerId: String) {
         _settingsFlow.update { it.copy(preferredProviderId = providerId) }
+    }
+
+    fun updateAuddToken(token: String) {
+        _settingsFlow.update { it.copy(auddApiToken = token.trim()) }
     }
 }

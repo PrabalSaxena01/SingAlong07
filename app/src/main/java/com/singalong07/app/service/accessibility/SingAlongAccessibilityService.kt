@@ -134,15 +134,6 @@ class SingAlongAccessibilityService : AccessibilityService() {
                         // 1. Dispatch to SingAlongApp
                         val app = application as? SingAlongApp
                         app?.onExternalSongIdentified(cleanTitle, cleanArtist, "google.soundsearch")
-
-                        // 2. Automatically press BACK to dismiss Google Sound Search back to user's music/app
-                        mainHandler.postDelayed({
-                            try {
-                                performGlobalAction(GLOBAL_ACTION_BACK)
-                            } catch (e: Exception) {
-                                Log.w(TAG, "Failed to auto-dismiss Google window", e)
-                            }
-                        }, 350L)
                     }
                 }
             }
@@ -208,20 +199,6 @@ class SingAlongAccessibilityService : AccessibilityService() {
                 if (isValidSongText(parts[0]) && isValidSongText(parts[1])) {
                     return Pair(parts[0], parseArtistSubtitle(parts[1]))
                 }
-            }
-        }
-
-        // Strategy 4: Filter significant valid text nodes sequentially
-        val validTexts = items
-            .map { it.text.trim() }
-            .filter { isValidSongText(it) }
-            .distinct()
-
-        if (validTexts.size >= 2) {
-            val candidateTitle = validTexts[0]
-            val candidateArtist = parseArtistSubtitle(validTexts[1])
-            if (candidateTitle.isNotBlank() && candidateArtist.isNotBlank() && candidateTitle != candidateArtist) {
-                return Pair(candidateTitle, candidateArtist)
             }
         }
 
